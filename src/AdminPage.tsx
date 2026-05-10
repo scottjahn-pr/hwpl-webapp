@@ -200,7 +200,8 @@ function AdminPage() {
 
     if (!lRes.ok || !tRes.ok || !pRes.ok) {
       const statusSummary = `leagues=${lRes.status}, teams=${tRes.status}, players=${pRes.status}`;
-      throw new Error(`Failed to load admin data (${statusSummary})`);
+      setAdminMessage(`Signed in as admin, but failed to load admin data (${statusSummary}).`);
+      return;
     }
 
     const loadedLeagues: League[] = await lRes.json();
@@ -259,7 +260,7 @@ function AdminPage() {
     } catch (error) {
       setIsAuthorized(false);
       setAuthMessage("Could not validate admin session. Try refreshing.");
-      setAdminMessage(error instanceof Error ? error.message : "Failed to load admin data.");
+      setAdminMessage(error instanceof Error ? error.message : "Failed to validate admin session.");
     } finally {
       setAuthLoading(false);
     }
