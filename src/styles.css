@@ -369,6 +369,24 @@ button:hover {
   font-size: 0.78rem;
 }
 
+.admin-identity-box-hero {
+  margin-top: 0.9rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.admin-identity-box-hero p {
+  color: #d6fff8;
+}
+
+.admin-identity-box-hero .admin-identity-row code {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.admin-identity-box-hero .status-msg {
+  color: #d6fff8;
+}
+
 @keyframes float-in {
   from {
     opacity: 0;
