@@ -115,6 +115,7 @@ function AdminPage() {
   const [matchError, setMatchError] = useState("");
   const [adminMessage, setAdminMessage] = useState("");
   const [csvDate, setCsvDate] = useState(new Date().toISOString().slice(0, 10));
+  const [adminApiBase, setAdminApiBase] = useState("/api/ops");
 
   const leagueNameById = useMemo(() => new Map(leagues.map((l) => [l.id, `${l.name} (${l.season})`])), [leagues]);
 
@@ -186,21 +187,33 @@ function AdminPage() {
   }, []);
 
   const loadAdminData = useCallback(async (): Promise<void> => {
-    const [lRes, tRes, pRes] = await Promise.all([
-      authFetch("/api/ops/leagues"),
-      authFetch("/api/ops/teams"),
-      authFetch("/api/ops/players")
+    let base = adminApiBase;
+    let [lRes, tRes, pRes] = await Promise.all([
+      authFetch(`${base}/leagues`),
+      authFetch(`${base}/teams`),
+      authFetch(`${base}/players`)
     ]);
+
+    // If all collection endpoints are missing, try the alternate namespace.
+    if ([lRes, tRes, pRes].every((res) => res.status === 404)) {
+      base = base === "/api/ops" ? "/api/admin" : "/api/ops";
+      [lRes, tRes, pRes] = await Promise.all([
+        authFetch(`${base}/leagues`),
+        authFetch(`${base}/teams`),
+        authFetch(`${base}/players`)
+      ]);
+      setAdminApiBase(base);
+    }
 
     if ([lRes, tRes, pRes].some((res) => res.status === 401 || res.status === 403)) {
       const statusSummary = `leagues=${lRes.status}, teams=${tRes.status}, players=${pRes.status}`;
-      setAdminMessage(`Signed in as admin, but one or more admin data endpoints were denied (${statusSummary}).`);
+      setAdminMessage(`Signed in as admin, but one or more admin data endpoints were denied (${statusSummary}) via ${base}.`);
       return;
     }
 
     if (!lRes.ok || !tRes.ok || !pRes.ok) {
       const statusSummary = `leagues=${lRes.status}, teams=${tRes.status}, players=${pRes.status}`;
-      setAdminMessage(`Signed in as admin, but failed to load admin data (${statusSummary}).`);
+      setAdminMessage(`Signed in as admin, but failed to load admin data (${statusSummary}) via ${base}.`);
       return;
     }
 
@@ -224,7 +237,7 @@ function AdminPage() {
       teamBPlayer1: prev.teamBPlayer1 || loadedPlayers[2]?.id || "",
       teamBPlayer2: prev.teamBPlayer2 || loadedPlayers[3]?.id || ""
     }));
-  }, []);
+  }, [adminApiBase]);
 
   const checkAuthorization = useCallback(async () => {
     setAuthLoading(true);
@@ -284,7 +297,7 @@ function AdminPage() {
   const onSavePlayer = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const res = await authFetch(editingPlayerId ? `/api/ops/players/${editingPlayerId}` : "/api/ops/players", {
+      const res = await authFetch(editingPlayerId ? `${adminApiBase}/players/${editingPlayerId}` : `${adminApiBase}/players`, {
         method: editingPlayerId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(playerForm)
@@ -302,7 +315,7 @@ function AdminPage() {
   const onSaveTeam = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const res = await authFetch(editingTeamId ? `/api/ops/teams/${editingTeamId}` : "/api/ops/teams", {
+      const res = await authFetch(editingTeamId ? `${adminApiBase}/teams/${editingTeamId}` : `${adminApiBase}/teams`, {
         method: editingTeamId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(teamForm)
@@ -320,7 +333,7 @@ function AdminPage() {
   const onSaveLeague = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const res = await authFetch(editingLeagueId ? `/api/ops/leagues/${editingLeagueId}` : "/api/ops/leagues", {
+      const res = await authFetch(editingLeagueId ? `${adminApiBase}/leagues/${editingLeagueId}` : `${adminApiBase}/leagues`, {
         method: editingLeagueId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(leagueForm)
@@ -337,7 +350,7 @@ function AdminPage() {
 
   const onDeletePlayer = async (playerId: string) => {
     try {
-      const res = await authFetch(`/api/ops/players/${playerId}`, { method: "DELETE" });
+      const res = await authFetch(`${adminApiBase}/players/${playerId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("failed");
       setAdminMessage("Player removed.");
       await loadAdminData();
@@ -348,7 +361,7 @@ function AdminPage() {
 
   const onDeleteTeam = async (teamId: string) => {
     try {
-      const res = await authFetch(`/api/ops/teams/${teamId}`, { method: "DELETE" });
+      const res = await authFetch(`${adminApiBase}/teams/${teamId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("failed");
       setAdminMessage("Team removed.");
       await loadAdminData();
@@ -359,7 +372,7 @@ function AdminPage() {
 
   const onDeleteLeague = async (leagueId: string) => {
     try {
-      const res = await authFetch(`/api/ops/leagues/${leagueId}`, { method: "DELETE" });
+      const res = await authFetch(`${adminApiBase}/leagues/${leagueId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("failed");
       setAdminMessage("League removed.");
       await loadAdminData();
@@ -391,7 +404,7 @@ function AdminPage() {
     }
 
     try {
-      const res = await authFetch("/api/ops/matches", {
+      const res = await authFetch(`${adminApiBase}/matches`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
