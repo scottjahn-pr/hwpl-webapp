@@ -1,6 +1,16 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { League, Player, Team } from "./types";
 
+interface AuthMeClaim {
+  typ?: string;
+  val?: string;
+}
+
+interface AuthMeEntry {
+  user_id?: string;
+  user_claims?: AuthMeClaim[];
+}
+
 type PlayerForm = Omit<Player, "id">;
 type TeamForm = Omit<Team, "id">;
 type LeagueForm = Omit<League, "id">;
@@ -41,6 +51,8 @@ function AdminPage() {
   const [authLoading, setAuthLoading] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [authMessage, setAuthMessage] = useState("");
+  const [entraObjectId, setEntraObjectId] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
 
   const [leagues, setLeagues] = useState<League[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -72,6 +84,34 @@ function AdminPage() {
   const [csvDate, setCsvDate] = useState(new Date().toISOString().slice(0, 10));
 
   const leagueNameById = useMemo(() => new Map(leagues.map((l) => [l.id, `${l.name} (${l.season})`])), [leagues]);
+
+  const extractObjectId = (entry: AuthMeEntry | undefined): string => {
+    if (!entry) return "";
+
+    if (entry.user_id) return entry.user_id;
+
+    const claims = entry.user_claims ?? [];
+    const oidClaim = claims.find(
+      (claim) =>
+        claim.typ === "oid" ||
+        claim.typ === "http://schemas.microsoft.com/identity/claims/objectidentifier"
+    );
+
+    return oidClaim?.val ?? "";
+  };
+
+  const loadSignedInObjectId = useCallback(async () => {
+    try {
+      const res = await fetch("/.auth/me");
+      if (!res.ok) return;
+
+      const data = (await res.json()) as AuthMeEntry[];
+      const objectId = extractObjectId(data?.[0]);
+      setEntraObjectId(objectId);
+    } catch {
+      setEntraObjectId("");
+    }
+  }, []);
 
   const loadAdminData = useCallback(async () => {
     const [lRes, tRes, pRes] = await Promise.all([
@@ -138,6 +178,21 @@ function AdminPage() {
   useEffect(() => {
     checkAuthorization();
   }, [checkAuthorization]);
+
+  useEffect(() => {
+    loadSignedInObjectId();
+  }, [loadSignedInObjectId]);
+
+  const copyObjectId = async () => {
+    if (!entraObjectId) return;
+
+    try {
+      await navigator.clipboard.writeText(entraObjectId);
+      setCopyMessage("Object ID copied.");
+    } catch {
+      setCopyMessage("Unable to copy automatically. Please copy manually.");
+    }
+  };
 
   const onSavePlayer = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -313,6 +368,17 @@ function AdminPage() {
         <section className="panel">
           <h3>Admin Access Required</h3>
           <p>{authMessage}</p>
+          <div className="admin-identity-box">
+            <h4>Who Am I</h4>
+            <p>Use this Entra Object ID in ADMIN_ENTRA_OBJECT_IDS to grant admin access.</p>
+            <div className="admin-identity-row">
+              <code>{entraObjectId || "Sign in to view your Entra Object ID"}</code>
+              <button type="button" onClick={copyObjectId} disabled={!entraObjectId}>
+                Copy ID
+              </button>
+            </div>
+            {copyMessage ? <p className="status-msg">{copyMessage}</p> : null}
+          </div>
           <div className="admin-auth-links">
             <a className="admin-link" href="/.auth/login/aad?post_login_redirect_uri=/admin">Sign in with Entra ID</a>
             <a className="admin-link" href="/">Back to public stats</a>
