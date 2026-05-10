@@ -1,0 +1,16 @@
+{
+  "name": "hwpl-api",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/functions/*.js",
+  "type": "module",
+  "scripts": {
+    "start": "func start",
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.0",
+    "hwpl-webapp": "file:..",
+    "mssql": "^11.0.1"
+  }
+}

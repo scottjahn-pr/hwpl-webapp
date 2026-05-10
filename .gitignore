@@ -7,3 +7,4 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 *.local
+api/local.settings.json
