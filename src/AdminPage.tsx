@@ -491,17 +491,6 @@ function AdminPage() {
           <a className="admin-link" href="/">Public stats</a>
           <a className="admin-link" href="/.auth/logout?post_logout_redirect_uri=/">Sign out</a>
         </div>
-        <div className="admin-identity-box admin-identity-box-hero">
-          <h4>Who Am I</h4>
-          <p>Your Entra Object ID (for admin allowlist):</p>
-          <div className="admin-identity-row">
-            <code>{entraObjectId || "Sign in to view your Entra Object ID"}</code>
-            <button type="button" onClick={copyObjectId} disabled={!entraObjectId}>
-              Copy ID
-            </button>
-          </div>
-          {copyMessage ? <p className="status-msg">{copyMessage}</p> : null}
-        </div>
       </section>
 
       <section className="admin-grid">

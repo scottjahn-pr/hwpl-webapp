@@ -196,180 +196,199 @@ app.http("statsLeagues", {
   }
 });
 
-app.http("adminPlayers", {
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  route: "admin/players/{id?}",
-  handler: async (request, context) => {
-    const authError = requireAdmin(request);
-    if (authError) return authError;
+const handleAdminPlayers = async (request, id) => {
+  const authError = requireAdmin(request);
+  if (authError) return authError;
 
-    try {
-      if (request.method === "GET") {
-        const result = await runQuery(`
-          SELECT id, first_name AS firstName, last_name AS lastName, email, dupr_id AS duprId, default_team_id AS defaultTeamId
-          FROM players
-          ORDER BY first_name, last_name;
-        `);
-        return json(result.recordset);
-      }
-
-      const payload = await parseJson(request);
-      if (!payload) return badRequest("Invalid JSON body.");
-
-      if (request.method === "POST") {
-        const result = await runQuery(
-          `
-          INSERT INTO players (first_name, last_name, email, dupr_id, default_team_id)
-          OUTPUT INSERTED.id
-          VALUES (@firstName, @lastName, @email, @duprId, @defaultTeamId);
-          `,
-          [
-            { name: "firstName", type: sql.NVarChar(120), value: payload.firstName },
-            { name: "lastName", type: sql.NVarChar(120), value: payload.lastName },
-            { name: "email", type: sql.NVarChar(250), value: payload.email },
-            { name: "duprId", type: sql.NVarChar(100), value: payload.duprId },
-            { name: "defaultTeamId", type: sql.UniqueIdentifier, value: payload.defaultTeamId || null }
-          ]
-        );
-
-        return json({ id: result.recordset[0].id }, 201);
-      }
-
-      const id = context.bindingData.id;
-      if (!id) return badRequest("Missing route parameter: id.");
-
-      if (request.method === "PUT") {
-        await runQuery(
-          `
-          UPDATE players
-          SET first_name = @firstName,
-              last_name = @lastName,
-              email = @email,
-              dupr_id = @duprId,
-              default_team_id = @defaultTeamId
-          WHERE id = @id;
-          `,
-          [
-            { name: "id", type: sql.UniqueIdentifier, value: id },
-            { name: "firstName", type: sql.NVarChar(120), value: payload.firstName },
-            { name: "lastName", type: sql.NVarChar(120), value: payload.lastName },
-            { name: "email", type: sql.NVarChar(250), value: payload.email },
-            { name: "duprId", type: sql.NVarChar(100), value: payload.duprId },
-            { name: "defaultTeamId", type: sql.UniqueIdentifier, value: payload.defaultTeamId || null }
-          ]
-        );
-
-        return json({ updated: true });
-      }
-
-      await runQuery("DELETE FROM players WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
-      return json({ deleted: true });
-    } catch (error) {
-      return serverError(error.message);
+  try {
+    if (request.method === "GET") {
+      const result = await runQuery(`
+        SELECT id, first_name AS firstName, last_name AS lastName, email, dupr_id AS duprId, default_team_id AS defaultTeamId
+        FROM players
+        ORDER BY first_name, last_name;
+      `);
+      return json(result.recordset);
     }
+
+    const payload = await parseJson(request);
+    if (!payload) return badRequest("Invalid JSON body.");
+
+    if (request.method === "POST") {
+      const result = await runQuery(
+        `
+        INSERT INTO players (first_name, last_name, email, dupr_id, default_team_id)
+        OUTPUT INSERTED.id
+        VALUES (@firstName, @lastName, @email, @duprId, @defaultTeamId);
+        `,
+        [
+          { name: "firstName", type: sql.NVarChar(120), value: payload.firstName },
+          { name: "lastName", type: sql.NVarChar(120), value: payload.lastName },
+          { name: "email", type: sql.NVarChar(250), value: payload.email },
+          { name: "duprId", type: sql.NVarChar(100), value: payload.duprId },
+          { name: "defaultTeamId", type: sql.UniqueIdentifier, value: payload.defaultTeamId || null }
+        ]
+      );
+      return json({ id: result.recordset[0].id }, 201);
+    }
+
+    if (!id) return badRequest("Missing route parameter: id.");
+
+    if (request.method === "PUT") {
+      await runQuery(
+        `
+        UPDATE players
+        SET first_name = @firstName,
+            last_name = @lastName,
+            email = @email,
+            dupr_id = @duprId,
+            default_team_id = @defaultTeamId
+        WHERE id = @id;
+        `,
+        [
+          { name: "id", type: sql.UniqueIdentifier, value: id },
+          { name: "firstName", type: sql.NVarChar(120), value: payload.firstName },
+          { name: "lastName", type: sql.NVarChar(120), value: payload.lastName },
+          { name: "email", type: sql.NVarChar(250), value: payload.email },
+          { name: "duprId", type: sql.NVarChar(100), value: payload.duprId },
+          { name: "defaultTeamId", type: sql.UniqueIdentifier, value: payload.defaultTeamId || null }
+        ]
+      );
+      return json({ updated: true });
+    }
+
+    await runQuery("DELETE FROM players WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
+    return json({ deleted: true });
+  } catch (error) {
+    return serverError(error.message);
   }
+};
+
+const handleAdminTeams = async (request, id) => {
+  const authError = requireAdmin(request);
+  if (authError) return authError;
+
+  try {
+    if (request.method === "GET") {
+      const result = await runQuery("SELECT id, name, league_id AS leagueId FROM teams ORDER BY name;");
+      return json(result.recordset);
+    }
+
+    const payload = await parseJson(request);
+    if (!payload) return badRequest("Invalid JSON body.");
+
+    if (request.method === "POST") {
+      const result = await runQuery(
+        "INSERT INTO teams (name, league_id) OUTPUT INSERTED.id VALUES (@name, @leagueId);",
+        [
+          { name: "name", type: sql.NVarChar(120), value: payload.name },
+          { name: "leagueId", type: sql.UniqueIdentifier, value: payload.leagueId }
+        ]
+      );
+      return json({ id: result.recordset[0].id }, 201);
+    }
+
+    if (!id) return badRequest("Missing route parameter: id.");
+
+    if (request.method === "PUT") {
+      await runQuery(
+        "UPDATE teams SET name = @name, league_id = @leagueId WHERE id = @id;",
+        [
+          { name: "id", type: sql.UniqueIdentifier, value: id },
+          { name: "name", type: sql.NVarChar(120), value: payload.name },
+          { name: "leagueId", type: sql.UniqueIdentifier, value: payload.leagueId }
+        ]
+      );
+      return json({ updated: true });
+    }
+
+    await runQuery("DELETE FROM teams WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
+    return json({ deleted: true });
+  } catch (error) {
+    return serverError(error.message);
+  }
+};
+
+const handleAdminLeagues = async (request, id) => {
+  const authError = requireAdmin(request);
+  if (authError) return authError;
+
+  try {
+    if (request.method === "GET") {
+      const result = await runQuery("SELECT id, name, season, is_active AS isActive FROM leagues ORDER BY name, season;");
+      return json(result.recordset);
+    }
+
+    const payload = await parseJson(request);
+    if (!payload) return badRequest("Invalid JSON body.");
+
+    if (request.method === "POST") {
+      const result = await runQuery(
+        "INSERT INTO leagues (name, season, is_active) OUTPUT INSERTED.id VALUES (@name, @season, @isActive);",
+        [
+          { name: "name", type: sql.NVarChar(120), value: payload.name },
+          { name: "season", type: sql.NVarChar(80), value: payload.season },
+          { name: "isActive", type: sql.Bit, value: Boolean(payload.isActive) }
+        ]
+      );
+      return json({ id: result.recordset[0].id }, 201);
+    }
+
+    if (!id) return badRequest("Missing route parameter: id.");
+
+    if (request.method === "PUT") {
+      await runQuery(
+        "UPDATE leagues SET name = @name, season = @season, is_active = @isActive WHERE id = @id;",
+        [
+          { name: "id", type: sql.UniqueIdentifier, value: id },
+          { name: "name", type: sql.NVarChar(120), value: payload.name },
+          { name: "season", type: sql.NVarChar(80), value: payload.season },
+          { name: "isActive", type: sql.Bit, value: Boolean(payload.isActive) }
+        ]
+      );
+      return json({ updated: true });
+    }
+
+    await runQuery("DELETE FROM leagues WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
+    return json({ deleted: true });
+  } catch (error) {
+    return serverError(error.message);
+  }
+};
+
+app.http("adminPlayersCollection", {
+  methods: ["GET", "POST"],
+  route: "admin/players",
+  handler: async (request) => handleAdminPlayers(request)
 });
 
-app.http("adminTeams", {
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  route: "admin/teams/{id?}",
-  handler: async (request, context) => {
-    const authError = requireAdmin(request);
-    if (authError) return authError;
-
-    try {
-      if (request.method === "GET") {
-        const result = await runQuery("SELECT id, name, league_id AS leagueId FROM teams ORDER BY name;");
-        return json(result.recordset);
-      }
-
-      const payload = await parseJson(request);
-      if (!payload) return badRequest("Invalid JSON body.");
-
-      if (request.method === "POST") {
-        const result = await runQuery(
-          "INSERT INTO teams (name, league_id) OUTPUT INSERTED.id VALUES (@name, @leagueId);",
-          [
-            { name: "name", type: sql.NVarChar(120), value: payload.name },
-            { name: "leagueId", type: sql.UniqueIdentifier, value: payload.leagueId }
-          ]
-        );
-        return json({ id: result.recordset[0].id }, 201);
-      }
-
-      const id = context.bindingData.id;
-      if (!id) return badRequest("Missing route parameter: id.");
-
-      if (request.method === "PUT") {
-        await runQuery(
-          "UPDATE teams SET name = @name, league_id = @leagueId WHERE id = @id;",
-          [
-            { name: "id", type: sql.UniqueIdentifier, value: id },
-            { name: "name", type: sql.NVarChar(120), value: payload.name },
-            { name: "leagueId", type: sql.UniqueIdentifier, value: payload.leagueId }
-          ]
-        );
-        return json({ updated: true });
-      }
-
-      await runQuery("DELETE FROM teams WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
-      return json({ deleted: true });
-    } catch (error) {
-      return serverError(error.message);
-    }
-  }
+app.http("adminPlayersItem", {
+  methods: ["PUT", "DELETE"],
+  route: "admin/players/{id}",
+  handler: async (request, context) => handleAdminPlayers(request, context.bindingData.id)
 });
 
-app.http("adminLeagues", {
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  route: "admin/leagues/{id?}",
-  handler: async (request, context) => {
-    const authError = requireAdmin(request);
-    if (authError) return authError;
+app.http("adminTeamsCollection", {
+  methods: ["GET", "POST"],
+  route: "admin/teams",
+  handler: async (request) => handleAdminTeams(request)
+});
 
-    try {
-      if (request.method === "GET") {
-        const result = await runQuery("SELECT id, name, season, is_active AS isActive FROM leagues ORDER BY name, season;");
-        return json(result.recordset);
-      }
+app.http("adminTeamsItem", {
+  methods: ["PUT", "DELETE"],
+  route: "admin/teams/{id}",
+  handler: async (request, context) => handleAdminTeams(request, context.bindingData.id)
+});
 
-      const payload = await parseJson(request);
-      if (!payload) return badRequest("Invalid JSON body.");
+app.http("adminLeaguesCollection", {
+  methods: ["GET", "POST"],
+  route: "admin/leagues",
+  handler: async (request) => handleAdminLeagues(request)
+});
 
-      if (request.method === "POST") {
-        const result = await runQuery(
-          "INSERT INTO leagues (name, season, is_active) OUTPUT INSERTED.id VALUES (@name, @season, @isActive);",
-          [
-            { name: "name", type: sql.NVarChar(120), value: payload.name },
-            { name: "season", type: sql.NVarChar(80), value: payload.season },
-            { name: "isActive", type: sql.Bit, value: Boolean(payload.isActive) }
-          ]
-        );
-        return json({ id: result.recordset[0].id }, 201);
-      }
-
-      const id = context.bindingData.id;
-      if (!id) return badRequest("Missing route parameter: id.");
-
-      if (request.method === "PUT") {
-        await runQuery(
-          "UPDATE leagues SET name = @name, season = @season, is_active = @isActive WHERE id = @id;",
-          [
-            { name: "id", type: sql.UniqueIdentifier, value: id },
-            { name: "name", type: sql.NVarChar(120), value: payload.name },
-            { name: "season", type: sql.NVarChar(80), value: payload.season },
-            { name: "isActive", type: sql.Bit, value: Boolean(payload.isActive) }
-          ]
-        );
-        return json({ updated: true });
-      }
-
-      await runQuery("DELETE FROM leagues WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
-      return json({ deleted: true });
-    } catch (error) {
-      return serverError(error.message);
-    }
-  }
+app.http("adminLeaguesItem", {
+  methods: ["PUT", "DELETE"],
+  route: "admin/leagues/{id}",
+  handler: async (request, context) => handleAdminLeagues(request, context.bindingData.id)
 });
 
 app.http("adminMatches", {
