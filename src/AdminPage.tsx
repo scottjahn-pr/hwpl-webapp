@@ -22,14 +22,6 @@ interface AuthMeCurrentEntry {
   clientPrincipal?: AuthMePrincipal;
 }
 
-interface AdminMeResponse {
-  isAdmin: boolean;
-  objectId?: string;
-  candidateIds?: string[];
-  principalName?: string;
-  error?: string;
-}
-
 interface DebugAuthResponse {
   isAuthenticated?: boolean;
   isAdmin?: boolean;
@@ -235,27 +227,16 @@ function AdminPage() {
 
   const checkAuthorization = useCallback(async () => {
     setAuthLoading(true);
-    let adminCheckPassed = false;
     try {
-      const res = await authFetch("/api/admin/me");
-      const payload = (await res.json().catch(() => ({}))) as AdminMeResponse;
+      const debug = await loadAuthDebug();
 
-      if (res.ok) {
-        adminCheckPassed = true;
-        setIsAuthorized(true);
-        setAuthMessage("");
-        if (payload.objectId) {
-          setEntraObjectId(payload.objectId);
-        } else if (payload.candidateIds?.length) {
-          setEntraObjectId(payload.candidateIds[0]);
-        } else {
-          await loadSignedInObjectId();
-        }
-        await loadAdminData();
-      } else if (res.status === 401) {
+      if (!debug.isAuthenticated) {
         setIsAuthorized(false);
         setAuthMessage("Please sign in with Microsoft Entra ID to access admin tools.");
-        const debug = await loadAuthDebug();
+        await loadSignedInObjectId();
+      } else if (debug.isAdmin) {
+        setIsAuthorized(true);
+        setAuthMessage("");
         if (debug.objectId) {
           setEntraObjectId(debug.objectId);
         } else if (debug.candidateIds?.length) {
@@ -263,31 +244,22 @@ function AdminPage() {
         } else {
           await loadSignedInObjectId();
         }
+        await loadAdminData();
       } else {
         setIsAuthorized(false);
         setAuthMessage("Your account is signed in, but not approved for admin access.");
-        if (payload.objectId) {
-          setEntraObjectId(payload.objectId);
-        } else if (payload.candidateIds?.length) {
-          setEntraObjectId(payload.candidateIds[0]);
+        if (debug.objectId) {
+          setEntraObjectId(debug.objectId);
+        } else if (debug.candidateIds?.length) {
+          setEntraObjectId(debug.candidateIds[0]);
         } else {
-          const debug = await loadAuthDebug();
-          if (debug.objectId) {
-            setEntraObjectId(debug.objectId);
-          } else if (debug.candidateIds?.length) {
-            setEntraObjectId(debug.candidateIds[0]);
-          } else {
-            await loadSignedInObjectId();
-          }
+          await loadSignedInObjectId();
         }
       }
     } catch (error) {
-      if (adminCheckPassed) {
-        setAdminMessage(error instanceof Error ? error.message : "Failed to load admin data.");
-      } else {
-        setIsAuthorized(false);
-        setAuthMessage("Could not validate admin session. Try refreshing.");
-      }
+      setIsAuthorized(false);
+      setAuthMessage("Could not validate admin session. Try refreshing.");
+      setAdminMessage(error instanceof Error ? error.message : "Failed to load admin data.");
     } finally {
       setAuthLoading(false);
     }
