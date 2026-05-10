@@ -19,9 +19,13 @@ const parseAllowedAdminIds = () => {
     .filter(Boolean);
 };
 
+  const normalize = (value) => (value ? String(value).trim().toLowerCase() : "");
+
+  const unique = (items) => Array.from(new Set(items.filter(Boolean)));
+
 const extractPrincipalObjectId = (principal) => {
   const direct = principal?.userId;
-  if (direct) return String(direct).toLowerCase();
+  if (direct) return normalize(direct);
 
   const claims = principal?.claims ?? [];
   const oidClaim = claims.find((claim) =>
@@ -32,35 +36,66 @@ const extractPrincipalObjectId = (principal) => {
   );
 
   const value = oidClaim?.val ?? oidClaim?.value;
-  return value ? String(value).toLowerCase() : "";
+  return normalize(value);
+};
+
+const extractCandidateIds = (principal, principalIdHeader) => {
+  const claims = principal?.claims ?? [];
+
+  const claimValue = (types) => {
+    const match = claims.find((claim) => types.includes(claim?.typ) || types.includes(claim?.type));
+    return normalize(match?.val ?? match?.value);
+  };
+
+  const oid = extractPrincipalObjectId(principal);
+  const principalId = normalize(principalIdHeader);
+  const userId = normalize(principal?.userId);
+  const subject = claimValue(["sub", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"]);
+
+  return unique([oid, principalId, userId, subject]);
+};
+
+export const getPrincipalDetails = (request) => {
+  const principalHeader = request.headers.get("x-ms-client-principal");
+  const principalIdHeader = request.headers.get("x-ms-client-principal-id");
+  const principalNameHeader = request.headers.get("x-ms-client-principal-name");
+
+  const principal = parsePrincipal(principalHeader);
+  const candidateIds = extractCandidateIds(principal, principalIdHeader);
+
+  return {
+    isAuthenticated: Boolean(principal || principalIdHeader),
+    objectId: candidateIds[0] ?? "",
+    principalName: principalNameHeader ?? "",
+    candidateIds,
+    roles: principal?.userRoles ?? []
+  };
 };
 
 export const getPrincipalObjectId = (request) => {
-  const principal = parsePrincipal(request.headers.get("x-ms-client-principal"));
-  return extractPrincipalObjectId(principal);
+  return getPrincipalDetails(request).objectId;
 };
 
 export const isAuthenticated = (request) => {
-  const principal = parsePrincipal(request.headers.get("x-ms-client-principal"));
-  return Boolean(principal);
+  return getPrincipalDetails(request).isAuthenticated;
 };
 
 export const isAdmin = (request) => {
   const principal = parsePrincipal(request.headers.get("x-ms-client-principal"));
+  const details = getPrincipalDetails(request);
 
   // Allow local testing without authentication headers.
   if (!principal && process.env.NODE_ENV !== "production") {
     return true;
   }
 
-  if (!principal) return false;
+  if (!details.isAuthenticated) return false;
 
   const allowedAdminIds = parseAllowedAdminIds();
-  const objectId = extractPrincipalObjectId(principal);
   if (allowedAdminIds.length > 0) {
-    return Boolean(objectId && allowedAdminIds.includes(objectId));
+    return details.candidateIds.some((id) => allowedAdminIds.includes(id));
   }
 
-  const roles = principal?.userRoles ?? [];
+  const roles = details.roles;
   return roles.includes("admin");
 };

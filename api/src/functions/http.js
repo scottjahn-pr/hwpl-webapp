@@ -1,5 +1,5 @@
 import { app } from "@azure/functions";
-import { getPrincipalObjectId, isAdmin, isAuthenticated } from "../lib/auth.js";
+import { getPrincipalDetails, getPrincipalObjectId, isAdmin, isAuthenticated } from "../lib/auth.js";
 import { toCsv } from "../lib/csv.js";
 import { getPool, runQuery, sql } from "../lib/db.js";
 import { badRequest, json, parseJson, serverError, unauthorized, csv } from "../lib/http.js";
@@ -22,10 +22,26 @@ app.http("adminMe", {
   methods: ["GET"],
   route: "admin/me",
   handler: async (request) => {
-    const authError = requireAdmin(request);
-    if (authError) return authError;
+    const principal = getPrincipalDetails(request);
 
-    return json({ isAdmin: true, objectId: getPrincipalObjectId(request) });
+    if (!principal.isAuthenticated) {
+      return json({ isAdmin: false, error: "Authentication required." }, 401);
+    }
+
+    if (!isAdmin(request)) {
+      return json(
+        {
+          isAdmin: false,
+          error: "Admin role required.",
+          objectId: principal.objectId,
+          candidateIds: principal.candidateIds,
+          principalName: principal.principalName
+        },
+        403
+      );
+    }
+
+    return json({ isAdmin: true, objectId: getPrincipalObjectId(request), candidateIds: principal.candidateIds });
   }
 });
 

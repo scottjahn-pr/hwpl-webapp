@@ -25,6 +25,9 @@ interface AuthMeCurrentEntry {
 interface AdminMeResponse {
   isAdmin: boolean;
   objectId?: string;
+  candidateIds?: string[];
+  principalName?: string;
+  error?: string;
 }
 
 type PlayerForm = Omit<Player, "id">;
@@ -194,12 +197,15 @@ function AdminPage() {
     setAuthLoading(true);
     try {
       const res = await fetch("/api/admin/me", { credentials: "include" });
+      const payload = (await res.json().catch(() => ({}))) as AdminMeResponse;
+
       if (res.ok) {
-        const payload = (await res.json()) as AdminMeResponse;
         setIsAuthorized(true);
         setAuthMessage("");
         if (payload.objectId) {
           setEntraObjectId(payload.objectId);
+        } else if (payload.candidateIds?.length) {
+          setEntraObjectId(payload.candidateIds[0]);
         } else {
           await loadSignedInObjectId();
         }
@@ -211,7 +217,13 @@ function AdminPage() {
       } else {
         setIsAuthorized(false);
         setAuthMessage("Your account is signed in, but not approved for admin access.");
-        await loadSignedInObjectId();
+        if (payload.objectId) {
+          setEntraObjectId(payload.objectId);
+        } else if (payload.candidateIds?.length) {
+          setEntraObjectId(payload.candidateIds[0]);
+        } else {
+          await loadSignedInObjectId();
+        }
       }
     } catch {
       setIsAuthorized(false);
