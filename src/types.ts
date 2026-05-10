@@ -46,3 +46,21 @@ export interface StatsRow {
   differential: number;
   winRate: number;
 }
+
+export interface LeagueStatRow {
+  id: string;
+  name: string;
+  season: string;
+  isActive: boolean;
+  matches: number;
+  avgPointsPerMatch: number;
+}
+
+export interface RecentMatch {
+  id: string;
+  date: string;
+  teamA: string;
+  teamB: string;
+  scoreA: number;
+  scoreB: number;
+}

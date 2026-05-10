@@ -14,6 +14,31 @@ app.http("health", {
   handler: async () => json({ ok: true, service: "hwpl-api" })
 });
 
+app.http("statsMatches", {
+  methods: ["GET"],
+  route: "stats/matches",
+  handler: async () => {
+    try {
+      const result = await runQuery(`
+        SELECT TOP 10
+          m.id,
+          CONVERT(varchar(10), m.match_date, 120) AS date,
+          ta.name AS teamA,
+          tb.name AS teamB,
+          m.score_a AS scoreA,
+          m.score_b AS scoreB
+        FROM matches m
+        JOIN teams ta ON ta.id = m.team_a_id
+        JOIN teams tb ON tb.id = m.team_b_id
+        ORDER BY m.match_date DESC, m.created_at DESC;
+      `);
+      return json(result.recordset);
+    } catch (error) {
+      return serverError(error.message);
+    }
+  }
+});
+
 app.http("statsPlayers", {
   methods: ["GET"],
   route: "stats/players",
