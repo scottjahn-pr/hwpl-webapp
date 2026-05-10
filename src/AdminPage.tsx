@@ -187,9 +187,9 @@ function AdminPage() {
 
   const loadAdminData = useCallback(async (): Promise<void> => {
     const [lRes, tRes, pRes] = await Promise.all([
-      authFetch("/api/admin/leagues"),
-      authFetch("/api/admin/teams"),
-      authFetch("/api/admin/players")
+      authFetch("/api/ops/leagues"),
+      authFetch("/api/ops/teams"),
+      authFetch("/api/ops/players")
     ]);
 
     if ([lRes, tRes, pRes].some((res) => res.status === 401 || res.status === 403)) {
@@ -284,7 +284,7 @@ function AdminPage() {
   const onSavePlayer = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const res = await authFetch(editingPlayerId ? `/api/admin/players/${editingPlayerId}` : "/api/admin/players", {
+      const res = await authFetch(editingPlayerId ? `/api/ops/players/${editingPlayerId}` : "/api/ops/players", {
         method: editingPlayerId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(playerForm)
@@ -302,7 +302,7 @@ function AdminPage() {
   const onSaveTeam = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const res = await authFetch(editingTeamId ? `/api/admin/teams/${editingTeamId}` : "/api/admin/teams", {
+      const res = await authFetch(editingTeamId ? `/api/ops/teams/${editingTeamId}` : "/api/ops/teams", {
         method: editingTeamId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(teamForm)
@@ -320,7 +320,7 @@ function AdminPage() {
   const onSaveLeague = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const res = await authFetch(editingLeagueId ? `/api/admin/leagues/${editingLeagueId}` : "/api/admin/leagues", {
+      const res = await authFetch(editingLeagueId ? `/api/ops/leagues/${editingLeagueId}` : "/api/ops/leagues", {
         method: editingLeagueId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(leagueForm)
@@ -337,7 +337,7 @@ function AdminPage() {
 
   const onDeletePlayer = async (playerId: string) => {
     try {
-      const res = await authFetch(`/api/admin/players/${playerId}`, { method: "DELETE" });
+      const res = await authFetch(`/api/ops/players/${playerId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("failed");
       setAdminMessage("Player removed.");
       await loadAdminData();
@@ -348,7 +348,7 @@ function AdminPage() {
 
   const onDeleteTeam = async (teamId: string) => {
     try {
-      const res = await authFetch(`/api/admin/teams/${teamId}`, { method: "DELETE" });
+      const res = await authFetch(`/api/ops/teams/${teamId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("failed");
       setAdminMessage("Team removed.");
       await loadAdminData();
@@ -359,7 +359,7 @@ function AdminPage() {
 
   const onDeleteLeague = async (leagueId: string) => {
     try {
-      const res = await authFetch(`/api/admin/leagues/${leagueId}`, { method: "DELETE" });
+      const res = await authFetch(`/api/ops/leagues/${leagueId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("failed");
       setAdminMessage("League removed.");
       await loadAdminData();
@@ -391,7 +391,7 @@ function AdminPage() {
     }
 
     try {
-      const res = await authFetch("/api/admin/matches", {
+      const res = await authFetch("/api/ops/matches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -779,3 +779,4 @@ function AdminPage() {
 }
 
 export default AdminPage;
+

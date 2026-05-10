@@ -42,7 +42,7 @@ app.http("debugAuth", {
 
 app.http("adminMe", {
   methods: ["GET"],
-  route: "admin/me",
+  route: "ops/me",
   handler: async (request) => {
     const principal = getPrincipalDetails(request);
 
@@ -357,43 +357,43 @@ const handleAdminLeagues = async (request, id) => {
 
 app.http("adminPlayersCollection", {
   methods: ["GET", "POST"],
-  route: "admin/players",
+  route: "ops/players",
   handler: async (request) => handleAdminPlayers(request)
 });
 
 app.http("adminPlayersItem", {
   methods: ["PUT", "DELETE"],
-  route: "admin/players/{id}",
+  route: "ops/players/{id}",
   handler: async (request, context) => handleAdminPlayers(request, context.bindingData.id)
 });
 
 app.http("adminTeamsCollection", {
   methods: ["GET", "POST"],
-  route: "admin/teams",
+  route: "ops/teams",
   handler: async (request) => handleAdminTeams(request)
 });
 
 app.http("adminTeamsItem", {
   methods: ["PUT", "DELETE"],
-  route: "admin/teams/{id}",
+  route: "ops/teams/{id}",
   handler: async (request, context) => handleAdminTeams(request, context.bindingData.id)
 });
 
 app.http("adminLeaguesCollection", {
   methods: ["GET", "POST"],
-  route: "admin/leagues",
+  route: "ops/leagues",
   handler: async (request) => handleAdminLeagues(request)
 });
 
 app.http("adminLeaguesItem", {
   methods: ["PUT", "DELETE"],
-  route: "admin/leagues/{id}",
+  route: "ops/leagues/{id}",
   handler: async (request, context) => handleAdminLeagues(request, context.bindingData.id)
 });
 
 app.http("adminMatches", {
   methods: ["POST"],
-  route: "admin/matches",
+  route: "ops/matches",
   handler: async (request) => {
     const authError = requireAdmin(request);
     if (authError) return authError;
