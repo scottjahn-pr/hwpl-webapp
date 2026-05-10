@@ -97,7 +97,7 @@ const emptyLeagueForm: LeagueForm = {
 };
 
 const safeCsvCell = (value: string): string => {
-  return `"${value.replaceAll('"', '""')}"`;
+  return `"${value.split('"').join('""')}"`;
 };
 
 const rowFromEntry = (id: string, name: string): StatsRow => ({
