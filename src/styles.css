@@ -312,6 +312,27 @@ button:hover {
   color: var(--brand-dark);
 }
 
+.admin-entry {
+  padding: 0.7rem 1rem;
+  text-align: center;
+}
+
+.admin-link {
+  font-size: 0.8rem;
+  color: var(--brand-dark);
+  text-decoration: underline;
+}
+
+.admin-auth-links {
+  display: flex;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.admin-auth-links-hero .admin-link {
+  color: #d6fff8;
+}
+
 @keyframes float-in {
   from {
     opacity: 0;

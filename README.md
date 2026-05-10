@@ -4,7 +4,10 @@ A React + TypeScript web app for managing and viewing league statistics.
 
 ## Features
 
-- Persona views: regular user and admin
+- Public stats page for all users
+- Dedicated admin page at `/admin`
+- Admin sign-in through Microsoft Entra ID
+- Admin authorization using explicit Entra Object ID allowlist (`ADMIN_ENTRA_OBJECT_IDS`)
 - Admin CRUD workflows for players, teams, and leagues
 - Player profile fields: first name, last name, email, DUPR ID, default team
 - Match entry by admin with validation
@@ -26,6 +29,21 @@ A React + TypeScript web app for managing and viewing league statistics.
 - `npm run dev`: start local development server
 - `npm run build`: run TypeScript compile and Vite production build
 - `npm run preview`: preview production build locally
+
+## Admin Access Configuration
+
+In Azure Static Web Apps environment variables, set:
+
+- `ADMIN_ENTRA_OBJECT_IDS`: comma-separated Entra object IDs that are allowed admin access
+
+Example:
+
+`ADMIN_ENTRA_OBJECT_IDS=11111111-2222-3333-4444-555555555555,66666666-7777-8888-9999-aaaaaaaaaaaa`
+
+Notes:
+
+- Admin endpoints are blocked unless the signed-in Entra identity object ID is in this list.
+- If the variable is empty, only users with an explicit `admin` role are allowed.
 
 ## Club Logo And Color Theme
 

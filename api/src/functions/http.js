@@ -14,6 +14,17 @@ app.http("health", {
   handler: async () => json({ ok: true, service: "hwpl-api" })
 });
 
+app.http("adminMe", {
+  methods: ["GET"],
+  route: "admin/me",
+  handler: async (request) => {
+    const authError = requireAdmin(request);
+    if (authError) return authError;
+
+    return json({ isAdmin: true });
+  }
+});
+
 app.http("statsMatches", {
   methods: ["GET"],
   route: "stats/matches",
