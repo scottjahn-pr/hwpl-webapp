@@ -36,6 +36,23 @@ interface DebugAuthResponse {
   };
 }
 
+interface ManagedMatch {
+  id: string;
+  leagueId: string;
+  date: string;
+  teamAId: string;
+  teamBId: string;
+  scoreA: number;
+  scoreB: number;
+  leagueName: string;
+  teamAName: string;
+  teamBName: string;
+  teamAPlayers: [string, string];
+  teamBPlayers: [string, string];
+  teamAPlayerNames: [string, string];
+  teamBPlayerNames: [string, string];
+}
+
 type PlayerForm = Omit<Player, "id">;
 type TeamForm = Omit<Team, "id">;
 type LeagueForm = Omit<League, "id">;
@@ -90,6 +107,7 @@ function AdminPage() {
   const [leagues, setLeagues] = useState<League[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [matches, setMatches] = useState<ManagedMatch[]>([]);
 
   const [playerForm, setPlayerForm] = useState<PlayerForm>({ ...emptyPlayerForm });
   const [teamForm, setTeamForm] = useState<TeamForm>({ ...emptyTeamForm });
@@ -98,6 +116,7 @@ function AdminPage() {
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingLeagueId, setEditingLeagueId] = useState<string | null>(null);
+  const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
 
   const [matchForm, setMatchForm] = useState<MatchForm>({
     leagueId: "",
@@ -188,31 +207,33 @@ function AdminPage() {
 
   const loadAdminData = useCallback(async (): Promise<void> => {
     let base = adminApiBase;
-    let [lRes, tRes, pRes] = await Promise.all([
+    let [lRes, tRes, pRes, mRes] = await Promise.all([
       authFetch(`${base}/leagues`),
       authFetch(`${base}/teams`),
-      authFetch(`${base}/players`)
+      authFetch(`${base}/players`),
+      authFetch(`${base}/matches`)
     ]);
 
     // If all collection endpoints are missing, try the alternate namespace.
-    if ([lRes, tRes, pRes].every((res) => res.status === 404)) {
+    if ([lRes, tRes, pRes, mRes].every((res) => res.status === 404)) {
       base = base === "/api/ops" ? "/api/admin" : "/api/ops";
-      [lRes, tRes, pRes] = await Promise.all([
+      [lRes, tRes, pRes, mRes] = await Promise.all([
         authFetch(`${base}/leagues`),
         authFetch(`${base}/teams`),
-        authFetch(`${base}/players`)
+        authFetch(`${base}/players`),
+        authFetch(`${base}/matches`)
       ]);
       setAdminApiBase(base);
     }
 
-    if ([lRes, tRes, pRes].some((res) => res.status === 401 || res.status === 403)) {
-      const statusSummary = `leagues=${lRes.status}, teams=${tRes.status}, players=${pRes.status}`;
+    if ([lRes, tRes, pRes, mRes].some((res) => res.status === 401 || res.status === 403)) {
+      const statusSummary = `leagues=${lRes.status}, teams=${tRes.status}, players=${pRes.status}, matches=${mRes.status}`;
       setAdminMessage(`Signed in as admin, but one or more admin data endpoints were denied (${statusSummary}) via ${base}.`);
       return;
     }
 
-    if (!lRes.ok || !tRes.ok || !pRes.ok) {
-      const statusSummary = `leagues=${lRes.status}, teams=${tRes.status}, players=${pRes.status}`;
+    if (!lRes.ok || !tRes.ok || !pRes.ok || !mRes.ok) {
+      const statusSummary = `leagues=${lRes.status}, teams=${tRes.status}, players=${pRes.status}, matches=${mRes.status}`;
       setAdminMessage(`Signed in as admin, but failed to load admin data (${statusSummary}) via ${base}.`);
       return;
     }
@@ -220,10 +241,12 @@ function AdminPage() {
     const loadedLeagues: League[] = await lRes.json();
     const loadedTeams: Team[] = await tRes.json();
     const loadedPlayers: Player[] = await pRes.json();
+    const loadedMatches: ManagedMatch[] = await mRes.json();
 
     setLeagues(loadedLeagues);
     setTeams(loadedTeams);
     setPlayers(loadedPlayers);
+    setMatches(loadedMatches);
 
     setPlayerForm((prev) => ({ ...prev, defaultTeamId: prev.defaultTeamId || loadedTeams[0]?.id || "" }));
     setTeamForm((prev) => ({ ...prev, leagueId: prev.leagueId || loadedLeagues[0]?.id || "" }));
@@ -381,6 +404,42 @@ function AdminPage() {
     }
   };
 
+  const onEditMatch = (match: ManagedMatch) => {
+    setEditingMatchId(match.id);
+    setMatchForm({
+      leagueId: match.leagueId,
+      date: match.date,
+      teamAId: match.teamAId,
+      teamBId: match.teamBId,
+      teamAPlayer1: match.teamAPlayers[0],
+      teamAPlayer2: match.teamAPlayers[1],
+      teamBPlayer1: match.teamBPlayers[0],
+      teamBPlayer2: match.teamBPlayers[1],
+      scoreA: String(match.scoreA),
+      scoreB: String(match.scoreB)
+    });
+    setAdminMessage(`Editing match from ${match.date}. Save to apply updates.`);
+  };
+
+  const onCancelMatchEdit = () => {
+    setEditingMatchId(null);
+    setMatchForm((prev) => ({ ...prev, scoreA: "11", scoreB: "8" }));
+  };
+
+  const onDeleteMatch = async (matchId: string) => {
+    try {
+      const res = await authFetch(`${adminApiBase}/matches/${matchId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("failed");
+      if (editingMatchId === matchId) {
+        setEditingMatchId(null);
+      }
+      setAdminMessage("Match deleted.");
+      await loadAdminData();
+    } catch {
+      setAdminMessage("Error deleting match.");
+    }
+  };
+
   const onRecordMatch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setMatchError("");
@@ -404,8 +463,8 @@ function AdminPage() {
     }
 
     try {
-      const res = await authFetch(`${adminApiBase}/matches`, {
-        method: "POST",
+      const res = await authFetch(editingMatchId ? `${adminApiBase}/matches/${editingMatchId}` : `${adminApiBase}/matches`, {
+        method: editingMatchId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leagueId: matchForm.leagueId,
@@ -425,7 +484,9 @@ function AdminPage() {
         return;
       }
 
-      setAdminMessage("Match result recorded.");
+      setEditingMatchId(null);
+      setAdminMessage(editingMatchId ? "Match updated." : "Match result recorded.");
+      await loadAdminData();
     } catch {
       setMatchError("Network error recording match.");
     }
@@ -507,170 +568,7 @@ function AdminPage() {
       </section>
 
       <section className="admin-grid">
-        <article className="panel">
-          <div className="panel-header">
-            <h3>Manage Players</h3>
-            <p>Add, remove, or modify player records.</p>
-          </div>
-          <form className="match-form" onSubmit={onSavePlayer}>
-            <div className="teams-grid">
-              <label>
-                First Name
-                <input value={playerForm.firstName} onChange={(e) => setPlayerForm((prev) => ({ ...prev, firstName: e.target.value }))} required />
-              </label>
-              <label>
-                Last Name
-                <input value={playerForm.lastName} onChange={(e) => setPlayerForm((prev) => ({ ...prev, lastName: e.target.value }))} required />
-              </label>
-              <label>
-                Email
-                <input type="email" value={playerForm.email} onChange={(e) => setPlayerForm((prev) => ({ ...prev, email: e.target.value }))} required />
-              </label>
-              <label>
-                DUPR ID
-                <input value={playerForm.duprId} onChange={(e) => setPlayerForm((prev) => ({ ...prev, duprId: e.target.value }))} required />
-              </label>
-              <label>
-                Default Team
-                <select
-                  value={playerForm.defaultTeamId}
-                  onChange={(e) => setPlayerForm((prev) => ({ ...prev, defaultTeamId: e.target.value }))}
-                  required
-                >
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {team.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <button type="submit">{editingPlayerId ? "Update Player" : "Add Player"}</button>
-          </form>
-          <ul className="entity-list">
-            {players.map((player) => (
-              <li key={player.id}>
-                <span>{`${player.firstName} ${player.lastName}`} ({player.duprId})</span>
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingPlayerId(player.id);
-                      setPlayerForm({
-                        firstName: player.firstName,
-                        lastName: player.lastName,
-                        email: player.email,
-                        duprId: player.duprId,
-                        defaultTeamId: player.defaultTeamId
-                      });
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button type="button" className="danger" onClick={() => onDeletePlayer(player.id)}>
-                    Remove
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </article>
-
-        <article className="panel">
-          <div className="panel-header">
-            <h3>Manage Teams</h3>
-            <p>Add, remove, or modify team records.</p>
-          </div>
-          <form className="match-form" onSubmit={onSaveTeam}>
-            <label>
-              Team Name
-              <input value={teamForm.name} onChange={(e) => setTeamForm((prev) => ({ ...prev, name: e.target.value }))} required />
-            </label>
-            <label>
-              League
-              <select value={teamForm.leagueId} onChange={(e) => setTeamForm((prev) => ({ ...prev, leagueId: e.target.value }))} required>
-                {leagues.map((league) => (
-                  <option key={league.id} value={league.id}>
-                    {league.name} ({league.season})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit">{editingTeamId ? "Update Team" : "Add Team"}</button>
-          </form>
-          <ul className="entity-list">
-            {teams.map((team) => (
-              <li key={team.id}>
-                <span>{team.name} - {leagueNameById.get(team.leagueId)}</span>
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingTeamId(team.id);
-                      setTeamForm({ name: team.name, leagueId: team.leagueId });
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button type="button" className="danger" onClick={() => onDeleteTeam(team.id)}>
-                    Remove
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </article>
-
-        <article className="panel">
-          <div className="panel-header">
-            <h3>Manage Leagues</h3>
-            <p>Add, remove, or modify leagues.</p>
-          </div>
-          <form className="match-form" onSubmit={onSaveLeague}>
-            <label>
-              League Name
-              <input value={leagueForm.name} onChange={(e) => setLeagueForm((prev) => ({ ...prev, name: e.target.value }))} required />
-            </label>
-            <label>
-              Season
-              <input value={leagueForm.season} onChange={(e) => setLeagueForm((prev) => ({ ...prev, season: e.target.value }))} required />
-            </label>
-            <label>
-              Active
-              <select
-                value={leagueForm.isActive ? "yes" : "no"}
-                onChange={(e) => setLeagueForm((prev) => ({ ...prev, isActive: e.target.value === "yes" }))}
-              >
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-            </label>
-            <button type="submit">{editingLeagueId ? "Update League" : "Add League"}</button>
-          </form>
-          <ul className="entity-list">
-            {leagues.map((league) => (
-              <li key={league.id}>
-                <span>{league.name} ({league.season})</span>
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingLeagueId(league.id);
-                      setLeagueForm({ name: league.name, season: league.season, isActive: league.isActive });
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button type="button" className="danger" onClick={() => onDeleteLeague(league.id)}>
-                    Remove
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </article>
-
-        <article className="panel">
+        <article className="panel module-record-match">
           <div className="panel-header">
             <h3>Record Match Result</h3>
             <p>Admins can add individual match outcomes.</p>
@@ -765,11 +663,16 @@ function AdminPage() {
               </label>
             </div>
             {matchError ? <p className="form-error">{matchError}</p> : null}
-            <button type="submit">Save Match</button>
+            <button type="submit">{editingMatchId ? "Update Match" : "Save Match"}</button>
+            {editingMatchId ? (
+              <button type="button" onClick={onCancelMatchEdit}>
+                Cancel Edit
+              </button>
+            ) : null}
           </form>
         </article>
 
-        <article className="panel">
+        <article className="panel module-export-dupr">
           <div className="panel-header">
             <h3>CSV Export for DUPR</h3>
             <p>Exports all matches for one day.</p>
@@ -784,6 +687,194 @@ function AdminPage() {
             </button>
           </div>
         </article>
+
+        <article className="panel module-manage-matches">
+          <div className="panel-header">
+            <h3>Manage Matches</h3>
+            <p>Edit or delete existing matches.</p>
+          </div>
+          <ul className="entity-list">
+            {matches.map((match) => (
+              <li key={match.id}>
+                <span>
+                  {match.date} - {match.teamAName} ({match.scoreA}) vs {match.teamBName} ({match.scoreB})
+                </span>
+                <div>
+                  <button type="button" onClick={() => onEditMatch(match)}>
+                    Edit
+                  </button>
+                  <button type="button" className="danger" onClick={() => onDeleteMatch(match.id)}>
+                    Delete
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </article>
+
+        <article className="panel module-manage-players">
+          <div className="panel-header">
+            <h3>Manage Players</h3>
+            <p>Add, remove, or modify player records.</p>
+          </div>
+          <form className="match-form" onSubmit={onSavePlayer}>
+            <div className="teams-grid">
+              <label>
+                First Name
+                <input value={playerForm.firstName} onChange={(e) => setPlayerForm((prev) => ({ ...prev, firstName: e.target.value }))} required />
+              </label>
+              <label>
+                Last Name
+                <input value={playerForm.lastName} onChange={(e) => setPlayerForm((prev) => ({ ...prev, lastName: e.target.value }))} required />
+              </label>
+              <label>
+                Email
+                <input type="email" value={playerForm.email} onChange={(e) => setPlayerForm((prev) => ({ ...prev, email: e.target.value }))} required />
+              </label>
+              <label>
+                DUPR ID
+                <input value={playerForm.duprId} onChange={(e) => setPlayerForm((prev) => ({ ...prev, duprId: e.target.value }))} required />
+              </label>
+              <label>
+                Default Team
+                <select
+                  value={playerForm.defaultTeamId}
+                  onChange={(e) => setPlayerForm((prev) => ({ ...prev, defaultTeamId: e.target.value }))}
+                  required
+                >
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <button type="submit">{editingPlayerId ? "Update Player" : "Add Player"}</button>
+          </form>
+          <ul className="entity-list">
+            {players.map((player) => (
+              <li key={player.id}>
+                <span>{`${player.firstName} ${player.lastName}`} ({player.duprId})</span>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingPlayerId(player.id);
+                      setPlayerForm({
+                        firstName: player.firstName,
+                        lastName: player.lastName,
+                        email: player.email,
+                        duprId: player.duprId,
+                        defaultTeamId: player.defaultTeamId
+                      });
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button type="button" className="danger" onClick={() => onDeletePlayer(player.id)}>
+                    Remove
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </article>
+
+        <article className="panel module-manage-teams">
+          <div className="panel-header">
+            <h3>Manage Teams</h3>
+            <p>Add, remove, or modify team records.</p>
+          </div>
+          <form className="match-form" onSubmit={onSaveTeam}>
+            <label>
+              Team Name
+              <input value={teamForm.name} onChange={(e) => setTeamForm((prev) => ({ ...prev, name: e.target.value }))} required />
+            </label>
+            <label>
+              League
+              <select value={teamForm.leagueId} onChange={(e) => setTeamForm((prev) => ({ ...prev, leagueId: e.target.value }))} required>
+                {leagues.map((league) => (
+                  <option key={league.id} value={league.id}>
+                    {league.name} ({league.season})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="submit">{editingTeamId ? "Update Team" : "Add Team"}</button>
+          </form>
+          <ul className="entity-list">
+            {teams.map((team) => (
+              <li key={team.id}>
+                <span>{team.name} - {leagueNameById.get(team.leagueId)}</span>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingTeamId(team.id);
+                      setTeamForm({ name: team.name, leagueId: team.leagueId });
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button type="button" className="danger" onClick={() => onDeleteTeam(team.id)}>
+                    Remove
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </article>
+
+        <article className="panel module-manage-leagues">
+          <div className="panel-header">
+            <h3>Manage Leagues</h3>
+            <p>Add, remove, or modify leagues.</p>
+          </div>
+          <form className="match-form" onSubmit={onSaveLeague}>
+            <label>
+              League Name
+              <input value={leagueForm.name} onChange={(e) => setLeagueForm((prev) => ({ ...prev, name: e.target.value }))} required />
+            </label>
+            <label>
+              Season
+              <input value={leagueForm.season} onChange={(e) => setLeagueForm((prev) => ({ ...prev, season: e.target.value }))} required />
+            </label>
+            <label>
+              Active
+              <select
+                value={leagueForm.isActive ? "yes" : "no"}
+                onChange={(e) => setLeagueForm((prev) => ({ ...prev, isActive: e.target.value === "yes" }))}
+              >
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+              </select>
+            </label>
+            <button type="submit">{editingLeagueId ? "Update League" : "Add League"}</button>
+          </form>
+          <ul className="entity-list">
+            {leagues.map((league) => (
+              <li key={league.id}>
+                <span>{league.name} ({league.season})</span>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingLeagueId(league.id);
+                      setLeagueForm({ name: league.name, season: league.season, isActive: league.isActive });
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button type="button" className="danger" onClick={() => onDeleteLeague(league.id)}>
+                    Remove
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </article>
+
       </section>
 
       {adminMessage ? <p className="panel status-msg">{adminMessage}</p> : null}

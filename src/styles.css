@@ -279,6 +279,30 @@ button:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.module-record-match {
+  order: 1;
+}
+
+.module-export-dupr {
+  order: 2;
+}
+
+.module-manage-matches {
+  order: 3;
+}
+
+.module-manage-players {
+  order: 4;
+}
+
+.module-manage-teams {
+  order: 5;
+}
+
+.module-manage-leagues {
+  order: 6;
+}
+
 .entity-list {
   list-style: none;
   margin: 0.8rem 0 0;

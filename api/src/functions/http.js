@@ -391,83 +391,195 @@ app.http("adminLeaguesItem", {
   handler: async (request, context) => handleAdminLeagues(request, context.bindingData.id)
 });
 
-app.http("adminMatches", {
-  methods: ["POST"],
+const saveMatch = async (payload, existingMatchId = null) => {
+  const allPlayers = [
+    ...(payload.teamAPlayers ?? []),
+    ...(payload.teamBPlayers ?? [])
+  ];
+
+  if (!Array.isArray(payload.teamAPlayers) || !Array.isArray(payload.teamBPlayers) || allPlayers.length !== 4) {
+    return badRequest("A match must include exactly two players on each team.");
+  }
+
+  if (new Set(allPlayers).size !== 4) {
+    return badRequest("Players in a match must be unique.");
+  }
+
+  const pool = await getPool();
+  const tx = new sql.Transaction(pool);
+
+  try {
+    await tx.begin();
+
+    let matchId = existingMatchId;
+    if (!existingMatchId) {
+      const insertRequest = new sql.Request(tx);
+      insertRequest.input("leagueId", sql.UniqueIdentifier, payload.leagueId);
+      insertRequest.input("matchDate", sql.Date, payload.date);
+      insertRequest.input("teamAId", sql.UniqueIdentifier, payload.teamAId);
+      insertRequest.input("teamBId", sql.UniqueIdentifier, payload.teamBId);
+      insertRequest.input("scoreA", sql.Int, payload.scoreA);
+      insertRequest.input("scoreB", sql.Int, payload.scoreB);
+
+      const matchResult = await insertRequest.query(`
+        INSERT INTO matches (league_id, match_date, team_a_id, team_b_id, score_a, score_b)
+        OUTPUT INSERTED.id
+        VALUES (@leagueId, @matchDate, @teamAId, @teamBId, @scoreA, @scoreB);
+      `);
+      matchId = matchResult.recordset[0].id;
+    } else {
+      const updateRequest = new sql.Request(tx);
+      updateRequest.input("id", sql.UniqueIdentifier, existingMatchId);
+      updateRequest.input("leagueId", sql.UniqueIdentifier, payload.leagueId);
+      updateRequest.input("matchDate", sql.Date, payload.date);
+      updateRequest.input("teamAId", sql.UniqueIdentifier, payload.teamAId);
+      updateRequest.input("teamBId", sql.UniqueIdentifier, payload.teamBId);
+      updateRequest.input("scoreA", sql.Int, payload.scoreA);
+      updateRequest.input("scoreB", sql.Int, payload.scoreB);
+
+      await updateRequest.query(`
+        UPDATE matches
+        SET league_id = @leagueId,
+            match_date = @matchDate,
+            team_a_id = @teamAId,
+            team_b_id = @teamBId,
+            score_a = @scoreA,
+            score_b = @scoreB
+        WHERE id = @id;
+      `);
+
+      const clearParticipantsRequest = new sql.Request(tx);
+      clearParticipantsRequest.input("matchId", sql.UniqueIdentifier, existingMatchId);
+      await clearParticipantsRequest.query("DELETE FROM match_participants WHERE match_id = @matchId;");
+    }
+
+    for (let i = 0; i < payload.teamAPlayers.length; i += 1) {
+      const participantRequest = new sql.Request(tx);
+      participantRequest.input("matchId", sql.UniqueIdentifier, matchId);
+      participantRequest.input("playerId", sql.UniqueIdentifier, payload.teamAPlayers[i]);
+      participantRequest.input("teamSide", sql.Char(1), "A");
+      participantRequest.input("teamId", sql.UniqueIdentifier, payload.teamAId);
+      participantRequest.input("participantOrder", sql.TinyInt, i + 1);
+      await participantRequest.query(`
+        INSERT INTO match_participants (match_id, player_id, team_side, team_id, participant_order)
+        VALUES (@matchId, @playerId, @teamSide, @teamId, @participantOrder);
+      `);
+    }
+
+    for (let i = 0; i < payload.teamBPlayers.length; i += 1) {
+      const participantRequest = new sql.Request(tx);
+      participantRequest.input("matchId", sql.UniqueIdentifier, matchId);
+      participantRequest.input("playerId", sql.UniqueIdentifier, payload.teamBPlayers[i]);
+      participantRequest.input("teamSide", sql.Char(1), "B");
+      participantRequest.input("teamId", sql.UniqueIdentifier, payload.teamBId);
+      participantRequest.input("participantOrder", sql.TinyInt, i + 1);
+      await participantRequest.query(`
+        INSERT INTO match_participants (match_id, player_id, team_side, team_id, participant_order)
+        VALUES (@matchId, @playerId, @teamSide, @teamId, @participantOrder);
+      `);
+    }
+
+    await tx.commit();
+    return json({ id: matchId }, existingMatchId ? 200 : 201);
+  } catch (error) {
+    await tx.rollback();
+    return serverError(error.message);
+  }
+};
+
+app.http("adminMatchesCollection", {
+  methods: ["GET", "POST"],
   route: "ops/matches",
   handler: async (request) => {
     const authError = requireAdmin(request);
     if (authError) return authError;
 
-    const payload = await parseJson(request);
-    if (!payload) return badRequest("Invalid JSON body.");
+    try {
+      if (request.method === "GET") {
+        const result = await runQuery(`
+          SELECT
+            m.id,
+            m.league_id AS leagueId,
+            CONVERT(varchar(10), m.match_date, 120) AS date,
+            m.team_a_id AS teamAId,
+            m.team_b_id AS teamBId,
+            m.score_a AS scoreA,
+            m.score_b AS scoreB,
+            l.name + ' (' + l.season + ')' AS leagueName,
+            ta.name AS teamAName,
+            tb.name AS teamBName,
+            mpa1.player_id AS teamAPlayer1,
+            mpa2.player_id AS teamAPlayer2,
+            mpb1.player_id AS teamBPlayer1,
+            mpb2.player_id AS teamBPlayer2,
+            pa1.first_name + ' ' + pa1.last_name AS teamAPlayer1Name,
+            pa2.first_name + ' ' + pa2.last_name AS teamAPlayer2Name,
+            pb1.first_name + ' ' + pb1.last_name AS teamBPlayer1Name,
+            pb2.first_name + ' ' + pb2.last_name AS teamBPlayer2Name
+          FROM matches m
+          JOIN leagues l ON l.id = m.league_id
+          JOIN teams ta ON ta.id = m.team_a_id
+          JOIN teams tb ON tb.id = m.team_b_id
+          JOIN match_participants mpa1 ON mpa1.match_id = m.id AND mpa1.team_side = 'A' AND mpa1.participant_order = 1
+          JOIN match_participants mpa2 ON mpa2.match_id = m.id AND mpa2.team_side = 'A' AND mpa2.participant_order = 2
+          JOIN match_participants mpb1 ON mpb1.match_id = m.id AND mpb1.team_side = 'B' AND mpb1.participant_order = 1
+          JOIN match_participants mpb2 ON mpb2.match_id = m.id AND mpb2.team_side = 'B' AND mpb2.participant_order = 2
+          JOIN players pa1 ON pa1.id = mpa1.player_id
+          JOIN players pa2 ON pa2.id = mpa2.player_id
+          JOIN players pb1 ON pb1.id = mpb1.player_id
+          JOIN players pb2 ON pb2.id = mpb2.player_id
+          ORDER BY m.match_date DESC, m.created_at DESC;
+        `);
 
-    const allPlayers = [
-      ...(payload.teamAPlayers ?? []),
-      ...(payload.teamBPlayers ?? [])
-    ];
+        const mapped = result.recordset.map((row) => ({
+          id: row.id,
+          leagueId: row.leagueId,
+          date: row.date,
+          teamAId: row.teamAId,
+          teamBId: row.teamBId,
+          scoreA: row.scoreA,
+          scoreB: row.scoreB,
+          leagueName: row.leagueName,
+          teamAName: row.teamAName,
+          teamBName: row.teamBName,
+          teamAPlayers: [row.teamAPlayer1, row.teamAPlayer2],
+          teamBPlayers: [row.teamBPlayer1, row.teamBPlayer2],
+          teamAPlayerNames: [row.teamAPlayer1Name, row.teamAPlayer2Name],
+          teamBPlayerNames: [row.teamBPlayer1Name, row.teamBPlayer2Name]
+        }));
 
-    if (!Array.isArray(payload.teamAPlayers) || !Array.isArray(payload.teamBPlayers) || allPlayers.length !== 4) {
-      return badRequest("A match must include exactly two players on each team.");
+        return json(mapped);
+      }
+
+      const payload = await parseJson(request);
+      if (!payload) return badRequest("Invalid JSON body.");
+      return saveMatch(payload);
+    } catch (error) {
+      return serverError(error.message);
     }
+  }
+});
 
-    if (new Set(allPlayers).size !== 4) {
-      return badRequest("Players in a match must be unique.");
-    }
+app.http("adminMatchesItem", {
+  methods: ["PUT", "DELETE"],
+  route: "ops/matches/{id}",
+  handler: async (request, context) => {
+    const authError = requireAdmin(request);
+    if (authError) return authError;
 
-    const pool = await getPool();
-    const tx = new sql.Transaction(pool);
+    const id = context.bindingData.id;
+    if (!id) return badRequest("Missing route parameter: id.");
 
     try {
-      await tx.begin();
-
-      const matchRequest = new sql.Request(tx);
-      matchRequest.input("leagueId", sql.UniqueIdentifier, payload.leagueId);
-      matchRequest.input("matchDate", sql.Date, payload.date);
-      matchRequest.input("teamAId", sql.UniqueIdentifier, payload.teamAId);
-      matchRequest.input("teamBId", sql.UniqueIdentifier, payload.teamBId);
-      matchRequest.input("scoreA", sql.Int, payload.scoreA);
-      matchRequest.input("scoreB", sql.Int, payload.scoreB);
-
-      const matchResult = await matchRequest.query(`
-        INSERT INTO matches (league_id, match_date, team_a_id, team_b_id, score_a, score_b)
-        OUTPUT INSERTED.id
-        VALUES (@leagueId, @matchDate, @teamAId, @teamBId, @scoreA, @scoreB);
-      `);
-
-      const matchId = matchResult.recordset[0].id;
-      const participantRequest = new sql.Request(tx);
-      participantRequest.input("matchId", sql.UniqueIdentifier, matchId);
-
-      for (let i = 0; i < payload.teamAPlayers.length; i += 1) {
-        participantRequest.parameters = {};
-        participantRequest.input("matchId", sql.UniqueIdentifier, matchId);
-        participantRequest.input("playerId", sql.UniqueIdentifier, payload.teamAPlayers[i]);
-        participantRequest.input("teamSide", sql.Char(1), "A");
-        participantRequest.input("teamId", sql.UniqueIdentifier, payload.teamAId);
-        participantRequest.input("participantOrder", sql.TinyInt, i + 1);
-        await participantRequest.query(`
-          INSERT INTO match_participants (match_id, player_id, team_side, team_id, participant_order)
-          VALUES (@matchId, @playerId, @teamSide, @teamId, @participantOrder);
-        `);
+      if (request.method === "DELETE") {
+        await runQuery("DELETE FROM matches WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
+        return json({ deleted: true });
       }
 
-      for (let i = 0; i < payload.teamBPlayers.length; i += 1) {
-        participantRequest.parameters = {};
-        participantRequest.input("matchId", sql.UniqueIdentifier, matchId);
-        participantRequest.input("playerId", sql.UniqueIdentifier, payload.teamBPlayers[i]);
-        participantRequest.input("teamSide", sql.Char(1), "B");
-        participantRequest.input("teamId", sql.UniqueIdentifier, payload.teamBId);
-        participantRequest.input("participantOrder", sql.TinyInt, i + 1);
-        await participantRequest.query(`
-          INSERT INTO match_participants (match_id, player_id, team_side, team_id, participant_order)
-          VALUES (@matchId, @playerId, @teamSide, @teamId, @participantOrder);
-        `);
-      }
-
-      await tx.commit();
-      return json({ id: matchId }, 201);
+      const payload = await parseJson(request);
+      if (!payload) return badRequest("Invalid JSON body.");
+      return saveMatch(payload, id);
     } catch (error) {
-      await tx.rollback();
       return serverError(error.message);
     }
   }
