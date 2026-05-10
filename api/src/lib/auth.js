@@ -14,7 +14,7 @@ const parseAllowedAdminIds = () => {
   if (!raw.trim()) return [];
 
   return raw
-    .split(",")
+    .split(/[;,\n]/)
     .map((id) => id.trim().toLowerCase())
     .filter(Boolean);
 };
@@ -26,10 +26,23 @@ const extractPrincipalObjectId = (principal) => {
   const claims = principal?.claims ?? [];
   const oidClaim = claims.find((claim) =>
     claim?.typ === "oid" ||
-    claim?.typ === "http://schemas.microsoft.com/identity/claims/objectidentifier"
+    claim?.type === "oid" ||
+    claim?.typ === "http://schemas.microsoft.com/identity/claims/objectidentifier" ||
+    claim?.type === "http://schemas.microsoft.com/identity/claims/objectidentifier"
   );
 
-  return oidClaim?.val ? String(oidClaim.val).toLowerCase() : "";
+  const value = oidClaim?.val ?? oidClaim?.value;
+  return value ? String(value).toLowerCase() : "";
+};
+
+export const getPrincipalObjectId = (request) => {
+  const principal = parsePrincipal(request.headers.get("x-ms-client-principal"));
+  return extractPrincipalObjectId(principal);
+};
+
+export const isAuthenticated = (request) => {
+  const principal = parsePrincipal(request.headers.get("x-ms-client-principal"));
+  return Boolean(principal);
 };
 
 export const isAdmin = (request) => {

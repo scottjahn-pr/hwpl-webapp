@@ -3,7 +3,9 @@ import { League, Player, Team } from "./types";
 
 interface AuthMeClaim {
   typ?: string;
+  type?: string;
   val?: string;
+  value?: string;
 }
 
 interface AuthMePrincipal {
@@ -18,6 +20,11 @@ interface AuthMeLegacyEntry {
 
 interface AuthMeCurrentEntry {
   clientPrincipal?: AuthMePrincipal;
+}
+
+interface AdminMeResponse {
+  isAdmin: boolean;
+  objectId?: string;
 }
 
 type PlayerForm = Omit<Player, "id">;
@@ -104,9 +111,12 @@ function AdminPage() {
     const currentOidClaim = currentClaims.find(
       (claim) =>
         claim.typ === "oid" ||
+        claim.type === "oid" ||
         claim.typ === "http://schemas.microsoft.com/identity/claims/objectidentifier"
+        || claim.type === "http://schemas.microsoft.com/identity/claims/objectidentifier"
     );
-    if (currentOidClaim?.val) return currentOidClaim.val;
+    const currentOidValue = currentOidClaim?.val ?? currentOidClaim?.value;
+    if (currentOidValue) return currentOidValue;
 
     const legacyEntry = entry as AuthMeLegacyEntry;
     if (legacyEntry.user_id) return legacyEntry.user_id;
@@ -115,15 +125,17 @@ function AdminPage() {
     const oidClaim = claims.find(
       (claim) =>
         claim.typ === "oid" ||
+        claim.type === "oid" ||
         claim.typ === "http://schemas.microsoft.com/identity/claims/objectidentifier"
+        || claim.type === "http://schemas.microsoft.com/identity/claims/objectidentifier"
     );
 
-    return oidClaim?.val ?? "";
+    return oidClaim?.val ?? oidClaim?.value ?? "";
   };
 
   const loadSignedInObjectId = useCallback(async (): Promise<string> => {
     try {
-      const res = await fetch("/.auth/me");
+      const res = await fetch("/.auth/me", { credentials: "include" });
       if (!res.ok) {
         setEntraObjectId("");
         return "";
@@ -181,21 +193,25 @@ function AdminPage() {
   const checkAuthorization = useCallback(async () => {
     setAuthLoading(true);
     try {
-      const objectId = await loadSignedInObjectId();
-      if (!objectId) {
-        setIsAuthorized(false);
-        setAuthMessage("Please sign in with Microsoft Entra ID to access admin tools.");
-        return;
-      }
-
-      const res = await fetch("/api/admin/me");
+      const res = await fetch("/api/admin/me", { credentials: "include" });
       if (res.ok) {
+        const payload = (await res.json()) as AdminMeResponse;
         setIsAuthorized(true);
         setAuthMessage("");
+        if (payload.objectId) {
+          setEntraObjectId(payload.objectId);
+        } else {
+          await loadSignedInObjectId();
+        }
         await loadAdminData();
+      } else if (res.status === 401) {
+        setIsAuthorized(false);
+        setAuthMessage("Please sign in with Microsoft Entra ID to access admin tools.");
+        await loadSignedInObjectId();
       } else {
         setIsAuthorized(false);
         setAuthMessage("Your account is signed in, but not approved for admin access.");
+        await loadSignedInObjectId();
       }
     } catch {
       setIsAuthorized(false);

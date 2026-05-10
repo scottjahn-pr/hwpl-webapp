@@ -1,10 +1,14 @@
 import { app } from "@azure/functions";
-import { isAdmin } from "../lib/auth.js";
+import { getPrincipalObjectId, isAdmin, isAuthenticated } from "../lib/auth.js";
 import { toCsv } from "../lib/csv.js";
 import { getPool, runQuery, sql } from "../lib/db.js";
 import { badRequest, json, parseJson, serverError, unauthorized, csv } from "../lib/http.js";
 
 const requireAdmin = (request) => {
+  if (!isAuthenticated(request)) {
+    return json({ error: "Authentication required." }, 401);
+  }
+
   return isAdmin(request) ? null : unauthorized();
 };
 
@@ -21,7 +25,7 @@ app.http("adminMe", {
     const authError = requireAdmin(request);
     if (authError) return authError;
 
-    return json({ isAdmin: true });
+    return json({ isAdmin: true, objectId: getPrincipalObjectId(request) });
   }
 });
 
