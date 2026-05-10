@@ -7,14 +7,6 @@
     {
       "route": "/admin/*",
       "allowedRoles": ["authenticated"]
-    },
-    {
-      "route": "/api/admin/*",
-      "allowedRoles": ["authenticated"]
-    },
-    {
-      "route": "/api/exports/dupr",
-      "allowedRoles": ["authenticated"]
     }
   ],
   "navigationFallback": {
