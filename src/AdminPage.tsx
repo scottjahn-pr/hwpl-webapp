@@ -6,9 +6,18 @@ interface AuthMeClaim {
   val?: string;
 }
 
-interface AuthMeEntry {
+interface AuthMePrincipal {
+  userId?: string;
+  claims?: AuthMeClaim[];
+}
+
+interface AuthMeLegacyEntry {
   user_id?: string;
   user_claims?: AuthMeClaim[];
+}
+
+interface AuthMeCurrentEntry {
+  clientPrincipal?: AuthMePrincipal;
 }
 
 type PlayerForm = Omit<Player, "id">;
@@ -85,12 +94,24 @@ function AdminPage() {
 
   const leagueNameById = useMemo(() => new Map(leagues.map((l) => [l.id, `${l.name} (${l.season})`])), [leagues]);
 
-  const extractObjectId = (entry: AuthMeEntry | undefined): string => {
+  const extractObjectId = (entry: AuthMeLegacyEntry | AuthMeCurrentEntry | undefined): string => {
     if (!entry) return "";
 
-    if (entry.user_id) return entry.user_id;
+    const currentPrincipal = (entry as AuthMeCurrentEntry).clientPrincipal;
+    if (currentPrincipal?.userId) return currentPrincipal.userId;
 
-    const claims = entry.user_claims ?? [];
+    const currentClaims = currentPrincipal?.claims ?? [];
+    const currentOidClaim = currentClaims.find(
+      (claim) =>
+        claim.typ === "oid" ||
+        claim.typ === "http://schemas.microsoft.com/identity/claims/objectidentifier"
+    );
+    if (currentOidClaim?.val) return currentOidClaim.val;
+
+    const legacyEntry = entry as AuthMeLegacyEntry;
+    if (legacyEntry.user_id) return legacyEntry.user_id;
+
+    const claims = legacyEntry.user_claims ?? [];
     const oidClaim = claims.find(
       (claim) =>
         claim.typ === "oid" ||
@@ -100,16 +121,21 @@ function AdminPage() {
     return oidClaim?.val ?? "";
   };
 
-  const loadSignedInObjectId = useCallback(async () => {
+  const loadSignedInObjectId = useCallback(async (): Promise<string> => {
     try {
       const res = await fetch("/.auth/me");
-      if (!res.ok) return;
+      if (!res.ok) {
+        setEntraObjectId("");
+        return "";
+      }
 
-      const data = (await res.json()) as AuthMeEntry[];
+      const data = (await res.json()) as Array<AuthMeLegacyEntry | AuthMeCurrentEntry>;
       const objectId = extractObjectId(data?.[0]);
       setEntraObjectId(objectId);
+      return objectId;
     } catch {
       setEntraObjectId("");
+      return "";
     }
   }, []);
 
@@ -155,14 +181,18 @@ function AdminPage() {
   const checkAuthorization = useCallback(async () => {
     setAuthLoading(true);
     try {
+      const objectId = await loadSignedInObjectId();
+      if (!objectId) {
+        setIsAuthorized(false);
+        setAuthMessage("Please sign in with Microsoft Entra ID to access admin tools.");
+        return;
+      }
+
       const res = await fetch("/api/admin/me");
       if (res.ok) {
         setIsAuthorized(true);
         setAuthMessage("");
         await loadAdminData();
-      } else if (res.status === 401) {
-        setIsAuthorized(false);
-        setAuthMessage("Please sign in with Microsoft Entra ID to access admin tools.");
       } else {
         setIsAuthorized(false);
         setAuthMessage("Your account is signed in, but not approved for admin access.");
@@ -173,15 +203,11 @@ function AdminPage() {
     } finally {
       setAuthLoading(false);
     }
-  }, [loadAdminData]);
+  }, [loadAdminData, loadSignedInObjectId]);
 
   useEffect(() => {
     checkAuthorization();
   }, [checkAuthorization]);
-
-  useEffect(() => {
-    loadSignedInObjectId();
-  }, [loadSignedInObjectId]);
 
   const copyObjectId = async () => {
     if (!entraObjectId) return;
