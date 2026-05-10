@@ -30,6 +30,20 @@ interface AdminMeResponse {
   error?: string;
 }
 
+interface DebugAuthResponse {
+  isAuthenticated?: boolean;
+  isAdmin?: boolean;
+  objectId?: string;
+  candidateIds?: string[];
+  principalName?: string;
+  roles?: string[];
+  headerPresence?: {
+    hasClientPrincipal?: boolean;
+    hasClientPrincipalId?: boolean;
+    hasClientPrincipalName?: boolean;
+  };
+}
+
 type PlayerForm = Omit<Player, "id">;
 type TeamForm = Omit<Team, "id">;
 type LeagueForm = Omit<League, "id">;
@@ -72,6 +86,7 @@ function AdminPage() {
   const [authMessage, setAuthMessage] = useState("");
   const [entraObjectId, setEntraObjectId] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const [authDebug, setAuthDebug] = useState("");
 
   const [leagues, setLeagues] = useState<League[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -154,6 +169,23 @@ function AdminPage() {
     }
   }, []);
 
+  const loadAuthDebug = useCallback(async (): Promise<DebugAuthResponse> => {
+    try {
+      const res = await fetch("/api/debug/auth", { credentials: "include" });
+      if (!res.ok) {
+        setAuthDebug("");
+        return {};
+      }
+
+      const payload = (await res.json()) as DebugAuthResponse;
+      setAuthDebug(JSON.stringify(payload, null, 2));
+      return payload;
+    } catch {
+      setAuthDebug("");
+      return {};
+    }
+  }, []);
+
   const loadAdminData = useCallback(async () => {
     const [lRes, tRes, pRes] = await Promise.all([
       fetch("/api/admin/leagues"),
@@ -213,7 +245,14 @@ function AdminPage() {
       } else if (res.status === 401) {
         setIsAuthorized(false);
         setAuthMessage("Please sign in with Microsoft Entra ID to access admin tools.");
-        await loadSignedInObjectId();
+        const debug = await loadAuthDebug();
+        if (debug.objectId) {
+          setEntraObjectId(debug.objectId);
+        } else if (debug.candidateIds?.length) {
+          setEntraObjectId(debug.candidateIds[0]);
+        } else {
+          await loadSignedInObjectId();
+        }
       } else {
         setIsAuthorized(false);
         setAuthMessage("Your account is signed in, but not approved for admin access.");
@@ -222,7 +261,14 @@ function AdminPage() {
         } else if (payload.candidateIds?.length) {
           setEntraObjectId(payload.candidateIds[0]);
         } else {
-          await loadSignedInObjectId();
+          const debug = await loadAuthDebug();
+          if (debug.objectId) {
+            setEntraObjectId(debug.objectId);
+          } else if (debug.candidateIds?.length) {
+            setEntraObjectId(debug.candidateIds[0]);
+          } else {
+            await loadSignedInObjectId();
+          }
         }
       }
     } catch {
@@ -231,7 +277,7 @@ function AdminPage() {
     } finally {
       setAuthLoading(false);
     }
-  }, [loadAdminData, loadSignedInObjectId]);
+  }, [loadAdminData, loadAuthDebug, loadSignedInObjectId]);
 
   useEffect(() => {
     checkAuthorization();
@@ -432,6 +478,7 @@ function AdminPage() {
               </button>
             </div>
             {copyMessage ? <p className="status-msg">{copyMessage}</p> : null}
+            {authDebug ? <pre className="auth-debug">{authDebug}</pre> : null}
           </div>
           <div className="admin-auth-links">
             <a className="admin-link" href="/.auth/login/aad?post_login_redirect_uri=/admin">Sign in with Entra ID</a>

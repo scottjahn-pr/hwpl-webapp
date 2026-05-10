@@ -18,6 +18,28 @@ app.http("health", {
   handler: async () => json({ ok: true, service: "hwpl-api" })
 });
 
+app.http("debugAuth", {
+  methods: ["GET"],
+  route: "debug/auth",
+  handler: async (request) => {
+    const principal = getPrincipalDetails(request);
+
+    return json({
+      isAuthenticated: principal.isAuthenticated,
+      isAdmin: isAdmin(request),
+      objectId: principal.objectId,
+      candidateIds: principal.candidateIds,
+      principalName: principal.principalName,
+      roles: principal.roles,
+      headerPresence: {
+        hasClientPrincipal: Boolean(request.headers.get("x-ms-client-principal")),
+        hasClientPrincipalId: Boolean(request.headers.get("x-ms-client-principal-id")),
+        hasClientPrincipalName: Boolean(request.headers.get("x-ms-client-principal-name"))
+      }
+    });
+  }
+});
+
 app.http("adminMe", {
   methods: ["GET"],
   route: "admin/me",
