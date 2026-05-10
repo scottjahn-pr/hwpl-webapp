@@ -193,7 +193,7 @@ function AdminPage() {
     }
   }, []);
 
-  const loadAdminData = useCallback(async () => {
+  const loadAdminData = useCallback(async (): Promise<void> => {
     const [lRes, tRes, pRes] = await Promise.all([
       authFetch("/api/admin/leagues"),
       authFetch("/api/admin/teams"),
@@ -201,13 +201,14 @@ function AdminPage() {
     ]);
 
     if ([lRes, tRes, pRes].some((res) => res.status === 401 || res.status === 403)) {
-      setIsAuthorized(false);
-      setAuthMessage("Your Entra ID is signed in but not approved for HWPL admin access.");
+      const statusSummary = `leagues=${lRes.status}, teams=${tRes.status}, players=${pRes.status}`;
+      setAdminMessage(`Signed in as admin, but one or more admin data endpoints were denied (${statusSummary}).`);
       return;
     }
 
     if (!lRes.ok || !tRes.ok || !pRes.ok) {
-      throw new Error("Failed to load admin data");
+      const statusSummary = `leagues=${lRes.status}, teams=${tRes.status}, players=${pRes.status}`;
+      throw new Error(`Failed to load admin data (${statusSummary})`);
     }
 
     const loadedLeagues: League[] = await lRes.json();
@@ -234,11 +235,13 @@ function AdminPage() {
 
   const checkAuthorization = useCallback(async () => {
     setAuthLoading(true);
+    let adminCheckPassed = false;
     try {
       const res = await authFetch("/api/admin/me");
       const payload = (await res.json().catch(() => ({}))) as AdminMeResponse;
 
       if (res.ok) {
+        adminCheckPassed = true;
         setIsAuthorized(true);
         setAuthMessage("");
         if (payload.objectId) {
@@ -278,9 +281,13 @@ function AdminPage() {
           }
         }
       }
-    } catch {
-      setIsAuthorized(false);
-      setAuthMessage("Could not reach admin API. Try refreshing.");
+    } catch (error) {
+      if (adminCheckPassed) {
+        setAdminMessage(error instanceof Error ? error.message : "Failed to load admin data.");
+      } else {
+        setIsAuthorized(false);
+        setAuthMessage("Could not validate admin session. Try refreshing.");
+      }
     } finally {
       setAuthLoading(false);
     }
