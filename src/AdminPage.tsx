@@ -80,6 +80,13 @@ const emptyLeagueForm: LeagueForm = {
   isActive: true
 };
 
+const authFetch = (input: RequestInfo | URL, init?: RequestInit) => {
+  return fetch(input, {
+    ...init,
+    credentials: "include"
+  });
+};
+
 function AdminPage() {
   const [authLoading, setAuthLoading] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -153,7 +160,7 @@ function AdminPage() {
 
   const loadSignedInObjectId = useCallback(async (): Promise<string> => {
     try {
-      const res = await fetch("/.auth/me", { credentials: "include" });
+      const res = await authFetch("/.auth/me");
       if (!res.ok) {
         setEntraObjectId("");
         return "";
@@ -171,7 +178,7 @@ function AdminPage() {
 
   const loadAuthDebug = useCallback(async (): Promise<DebugAuthResponse> => {
     try {
-      const res = await fetch("/api/debug/auth", { credentials: "include" });
+      const res = await authFetch("/api/debug/auth");
       if (!res.ok) {
         setAuthDebug("");
         return {};
@@ -188,9 +195,9 @@ function AdminPage() {
 
   const loadAdminData = useCallback(async () => {
     const [lRes, tRes, pRes] = await Promise.all([
-      fetch("/api/admin/leagues"),
-      fetch("/api/admin/teams"),
-      fetch("/api/admin/players")
+      authFetch("/api/admin/leagues"),
+      authFetch("/api/admin/teams"),
+      authFetch("/api/admin/players")
     ]);
 
     if ([lRes, tRes, pRes].some((res) => res.status === 401 || res.status === 403)) {
@@ -228,7 +235,7 @@ function AdminPage() {
   const checkAuthorization = useCallback(async () => {
     setAuthLoading(true);
     try {
-      const res = await fetch("/api/admin/me", { credentials: "include" });
+      const res = await authFetch("/api/admin/me");
       const payload = (await res.json().catch(() => ({}))) as AdminMeResponse;
 
       if (res.ok) {
@@ -297,7 +304,7 @@ function AdminPage() {
   const onSavePlayer = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const res = await fetch(editingPlayerId ? `/api/admin/players/${editingPlayerId}` : "/api/admin/players", {
+      const res = await authFetch(editingPlayerId ? `/api/admin/players/${editingPlayerId}` : "/api/admin/players", {
         method: editingPlayerId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(playerForm)
@@ -315,7 +322,7 @@ function AdminPage() {
   const onSaveTeam = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const res = await fetch(editingTeamId ? `/api/admin/teams/${editingTeamId}` : "/api/admin/teams", {
+      const res = await authFetch(editingTeamId ? `/api/admin/teams/${editingTeamId}` : "/api/admin/teams", {
         method: editingTeamId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(teamForm)
@@ -333,7 +340,7 @@ function AdminPage() {
   const onSaveLeague = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const res = await fetch(editingLeagueId ? `/api/admin/leagues/${editingLeagueId}` : "/api/admin/leagues", {
+      const res = await authFetch(editingLeagueId ? `/api/admin/leagues/${editingLeagueId}` : "/api/admin/leagues", {
         method: editingLeagueId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(leagueForm)
@@ -350,7 +357,7 @@ function AdminPage() {
 
   const onDeletePlayer = async (playerId: string) => {
     try {
-      const res = await fetch(`/api/admin/players/${playerId}`, { method: "DELETE" });
+      const res = await authFetch(`/api/admin/players/${playerId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("failed");
       setAdminMessage("Player removed.");
       await loadAdminData();
@@ -361,7 +368,7 @@ function AdminPage() {
 
   const onDeleteTeam = async (teamId: string) => {
     try {
-      const res = await fetch(`/api/admin/teams/${teamId}`, { method: "DELETE" });
+      const res = await authFetch(`/api/admin/teams/${teamId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("failed");
       setAdminMessage("Team removed.");
       await loadAdminData();
@@ -372,7 +379,7 @@ function AdminPage() {
 
   const onDeleteLeague = async (leagueId: string) => {
     try {
-      const res = await fetch(`/api/admin/leagues/${leagueId}`, { method: "DELETE" });
+      const res = await authFetch(`/api/admin/leagues/${leagueId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("failed");
       setAdminMessage("League removed.");
       await loadAdminData();
@@ -404,7 +411,7 @@ function AdminPage() {
     }
 
     try {
-      const res = await fetch("/api/admin/matches", {
+      const res = await authFetch("/api/admin/matches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -433,7 +440,7 @@ function AdminPage() {
 
   const exportMatchesForDay = async () => {
     try {
-      const res = await fetch(`/api/exports/dupr?date=${csvDate}`);
+      const res = await authFetch(`/api/exports/dupr?date=${csvDate}`);
       if (!res.ok) {
         setAdminMessage("Export failed. No matches for that date, or server error.");
         return;
