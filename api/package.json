@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@azure/functions": "^4.5.0",
-    "hwpl-webapp": "file:..",
     "mssql": "^11.0.1"
   }
 }
