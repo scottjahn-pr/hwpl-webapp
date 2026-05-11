@@ -24,6 +24,12 @@ VALUES
 (@teamKitchen,  @leagueSocial),
 (@teamBaseline, @leagueSocial);
 
+INSERT INTO dbo.courts (name, is_active)
+VALUES
+('Court 1', 1),
+('Court 2', 1),
+('Court 3', 1);
+
 INSERT INTO dbo.players (first_name, last_name, email, dupr_id, default_team_id, is_active)
 VALUES
 ('Avery', 'Martin', 'avery@example.com', 'D1001', @teamRiver, 1),

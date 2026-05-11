@@ -6,6 +6,7 @@ IF OBJECT_ID('dbo.matches', 'U') IS NOT NULL DROP TABLE dbo.matches;
 IF OBJECT_ID('dbo.players', 'U') IS NOT NULL DROP TABLE dbo.players;
 IF OBJECT_ID('dbo.team_leagues', 'U') IS NOT NULL DROP TABLE dbo.team_leagues;
 IF OBJECT_ID('dbo.teams', 'U') IS NOT NULL DROP TABLE dbo.teams;
+IF OBJECT_ID('dbo.courts', 'U') IS NOT NULL DROP TABLE dbo.courts;
 IF OBJECT_ID('dbo.leagues', 'U') IS NOT NULL DROP TABLE dbo.leagues;
 
 CREATE TABLE dbo.leagues (
@@ -18,6 +19,13 @@ CREATE TABLE dbo.leagues (
 );
 
 CREATE TABLE dbo.teams (
+  id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWID(),
+  name NVARCHAR(120) NOT NULL,
+  is_active BIT NOT NULL DEFAULT 1,
+  created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+
+CREATE TABLE dbo.courts (
   id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWID(),
   name NVARCHAR(120) NOT NULL,
   is_active BIT NOT NULL DEFAULT 1,
@@ -77,6 +85,7 @@ CREATE TABLE dbo.match_participants (
 
 CREATE UNIQUE INDEX UX_players_email ON dbo.players(email);
 CREATE UNIQUE INDEX UX_players_dupr_id ON dbo.players(dupr_id);
+CREATE UNIQUE INDEX UX_courts_name ON dbo.courts(name);
 CREATE UNIQUE INDEX UX_match_participants_unique_player ON dbo.match_participants(match_id, player_id);
 CREATE UNIQUE INDEX UX_match_participants_slot ON dbo.match_participants(match_id, team_side, participant_order);
 

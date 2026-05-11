@@ -403,6 +403,51 @@ const handleAdminLeagues = async (request, id) => {
   }
 };
 
+const handleAdminCourts = async (request, id) => {
+  const authError = requireAdmin(request);
+  if (authError) return authError;
+
+  try {
+    if (request.method === "GET") {
+      const result = await runQuery("SELECT id, name, is_active AS isActive FROM courts ORDER BY name;");
+      return json(result.recordset);
+    }
+
+    const payload = await parseJson(request);
+    if (!payload) return badRequest("Invalid JSON body.");
+
+    if (request.method === "POST") {
+      const result = await runQuery(
+        "INSERT INTO courts (name, is_active) OUTPUT INSERTED.id VALUES (@name, @isActive);",
+        [
+          { name: "name", type: sql.NVarChar(120), value: payload.name },
+          { name: "isActive", type: sql.Bit, value: payload.isActive ?? true }
+        ]
+      );
+      return json({ id: result.recordset[0].id }, 201);
+    }
+
+    if (!id) return badRequest("Missing route parameter: id.");
+
+    if (request.method === "PUT") {
+      await runQuery(
+        "UPDATE courts SET name = @name, is_active = @isActive WHERE id = @id;",
+        [
+          { name: "id", type: sql.UniqueIdentifier, value: id },
+          { name: "name", type: sql.NVarChar(120), value: payload.name },
+          { name: "isActive", type: sql.Bit, value: Boolean(payload.isActive) }
+        ]
+      );
+      return json({ updated: true });
+    }
+
+    await runQuery("UPDATE courts SET is_active = 0 WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
+    return json({ deactivated: true });
+  } catch (error) {
+    return serverError(error.message);
+  }
+};
+
 app.http("adminPlayersCollection", {
   methods: ["GET", "POST"],
   route: "ops/players",
@@ -437,6 +482,18 @@ app.http("adminLeaguesItem", {
   methods: ["PUT", "DELETE"],
   route: "ops/leagues/{id}",
   handler: async (request, context) => handleAdminLeagues(request, context.bindingData.id)
+});
+
+app.http("adminCourtsCollection", {
+  methods: ["GET", "POST"],
+  route: "ops/courts",
+  handler: async (request) => handleAdminCourts(request)
+});
+
+app.http("adminCourtsItem", {
+  methods: ["PUT", "DELETE"],
+  route: "ops/courts/{id}",
+  handler: async (request, context) => handleAdminCourts(request, context.bindingData.id)
 });
 
 const saveMatch = async (payload, existingMatchId = null) => {

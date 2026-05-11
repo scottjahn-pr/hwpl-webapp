@@ -303,6 +303,10 @@ button:hover {
   order: 6;
 }
 
+.module-manage-courts {
+  order: 7;
+}
+
 .entity-list {
   list-style: none;
   margin: 0.8rem 0 0;

@@ -9,6 +9,12 @@ export interface League {
   isActive: boolean;
 }
 
+export interface Court {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
 export interface Team {
   id: string;
   name: string;

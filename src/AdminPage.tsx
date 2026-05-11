@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { League, Player, Team } from "./types";
+import { Court, League, Player, Team } from "./types";
 
 interface AuthMeClaim {
   typ?: string;
@@ -56,6 +56,7 @@ interface ManagedMatch {
 type PlayerForm = Omit<Player, "id">;
 type TeamForm = { name: string; leagueIds: string[]; isActive: boolean };
 type LeagueForm = Omit<League, "id">;
+type CourtForm = Omit<Court, "id">;
 
 interface MatchForm {
   leagueId: string;
@@ -92,6 +93,11 @@ const emptyLeagueForm: LeagueForm = {
   isActive: true
 };
 
+const emptyCourtForm: CourtForm = {
+  name: "",
+  isActive: true
+};
+
 const authFetch = (input: RequestInfo | URL, init?: RequestInit) => {
   return fetch(input, {
     ...init,
@@ -108,6 +114,7 @@ function AdminPage() {
   const [authDebug, setAuthDebug] = useState("");
 
   const [leagues, setLeagues] = useState<League[]>([]);
+  const [courts, setCourts] = useState<Court[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<ManagedMatch[]>([]);
@@ -115,11 +122,13 @@ function AdminPage() {
   const [playerForm, setPlayerForm] = useState<PlayerForm>({ ...emptyPlayerForm });
   const [teamForm, setTeamForm] = useState<TeamForm>({ ...emptyTeamForm });
   const [leagueForm, setLeagueForm] = useState<LeagueForm>({ ...emptyLeagueForm });
+  const [courtForm, setCourtForm] = useState<CourtForm>({ ...emptyCourtForm });
 
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const editingTeamIdRef = useRef<string | null>(null);
   const [editingLeagueId, setEditingLeagueId] = useState<string | null>(null);
+  const [editingCourtId, setEditingCourtId] = useState<string | null>(null);
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
 
   const [matchForm, setMatchForm] = useState<MatchForm>({
@@ -222,18 +231,20 @@ function AdminPage() {
 
   const loadAdminData = useCallback(async (): Promise<void> => {
     let base = adminApiBase;
-    let [lRes, tRes, pRes, mRes] = await Promise.all([
+    let [lRes, cRes, tRes, pRes, mRes] = await Promise.all([
       authFetch(`${base}/leagues`),
+      authFetch(`${base}/courts`),
       authFetch(`${base}/teams`),
       authFetch(`${base}/players`),
       authFetch(`${base}/matches`)
     ]);
 
     // If all collection endpoints are missing, try the alternate namespace.
-    if ([lRes, tRes, pRes, mRes].every((res) => res.status === 404)) {
+    if ([lRes, cRes, tRes, pRes, mRes].every((res) => res.status === 404)) {
       base = base === "/api/ops" ? "/api/admin" : "/api/ops";
-      [lRes, tRes, pRes, mRes] = await Promise.all([
+      [lRes, cRes, tRes, pRes, mRes] = await Promise.all([
         authFetch(`${base}/leagues`),
+        authFetch(`${base}/courts`),
         authFetch(`${base}/teams`),
         authFetch(`${base}/players`),
         authFetch(`${base}/matches`)
@@ -241,24 +252,26 @@ function AdminPage() {
       setAdminApiBase(base);
     }
 
-    if ([lRes, tRes, pRes, mRes].some((res) => res.status === 401 || res.status === 403)) {
-      const statusSummary = `leagues=${lRes.status}, teams=${tRes.status}, players=${pRes.status}, matches=${mRes.status}`;
+    if ([lRes, cRes, tRes, pRes, mRes].some((res) => res.status === 401 || res.status === 403)) {
+      const statusSummary = `leagues=${lRes.status}, courts=${cRes.status}, teams=${tRes.status}, players=${pRes.status}, matches=${mRes.status}`;
       setAdminMessage(`Signed in as admin, but one or more admin data endpoints were denied (${statusSummary}) via ${base}.`);
       return;
     }
 
-    if (!lRes.ok || !tRes.ok || !pRes.ok || !mRes.ok) {
-      const statusSummary = `leagues=${lRes.status}, teams=${tRes.status}, players=${pRes.status}, matches=${mRes.status}`;
+    if (!lRes.ok || !cRes.ok || !tRes.ok || !pRes.ok || !mRes.ok) {
+      const statusSummary = `leagues=${lRes.status}, courts=${cRes.status}, teams=${tRes.status}, players=${pRes.status}, matches=${mRes.status}`;
       setAdminMessage(`Signed in as admin, but failed to load admin data (${statusSummary}) via ${base}.`);
       return;
     }
 
     const loadedLeagues: League[] = await lRes.json();
+    const loadedCourts: Court[] = await cRes.json();
     const loadedTeams: Team[] = await tRes.json();
     const loadedPlayers: Player[] = await pRes.json();
     const loadedMatches: ManagedMatch[] = await mRes.json();
 
     setLeagues(loadedLeagues);
+    setCourts(loadedCourts);
     setTeams(loadedTeams);
     setPlayers(loadedPlayers);
     setMatches(loadedMatches);
@@ -404,6 +417,24 @@ function AdminPage() {
     }
   };
 
+  const onSaveCourt = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    try {
+      const res = await authFetch(editingCourtId ? `${adminApiBase}/courts/${editingCourtId}` : `${adminApiBase}/courts`, {
+        method: editingCourtId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(courtForm)
+      });
+      if (!res.ok) throw new Error("failed");
+      setAdminMessage(editingCourtId ? "Court updated." : "Court added.");
+      setEditingCourtId(null);
+      setCourtForm({ ...emptyCourtForm });
+      await loadAdminData();
+    } catch {
+      setAdminMessage("Error saving court.");
+    }
+  };
+
   const onTogglePlayerActive = async (player: Player) => {
     try {
       const res = await authFetch(`${adminApiBase}/players/${player.id}`, {
@@ -462,6 +493,24 @@ function AdminPage() {
       await loadAdminData();
     } catch {
       setAdminMessage("Error updating league status.");
+    }
+  };
+
+  const onToggleCourtActive = async (court: Court) => {
+    try {
+      const res = await authFetch(`${adminApiBase}/courts/${court.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: court.name,
+          isActive: !court.isActive
+        })
+      });
+      if (!res.ok) throw new Error("failed");
+      setAdminMessage(court.isActive ? "Court deactivated." : "Court activated.");
+      await loadAdminData();
+    } catch {
+      setAdminMessage("Error updating court status.");
     }
   };
 
@@ -963,6 +1012,41 @@ function AdminPage() {
                   </button>
                   <button type="button" className={league.isActive ? "danger" : ""} onClick={() => onToggleLeagueActive(league)}>
                     {league.isActive ? "Deactivate" : "Activate"}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </article>
+
+        <article className="panel module-manage-courts">
+          <div className="panel-header">
+            <h3>Manage Courts</h3>
+            <p>Add, activate/deactivate, or modify courts.</p>
+          </div>
+          <form className="match-form" onSubmit={onSaveCourt}>
+            <label>
+              Court Name
+              <input value={courtForm.name} onChange={(e) => setCourtForm((prev) => ({ ...prev, name: e.target.value }))} required />
+            </label>
+            <button type="submit">{editingCourtId ? "Update Court" : "Add Court"}</button>
+          </form>
+          <ul className="entity-list">
+            {courts.map((court) => (
+              <li key={court.id}>
+                <span>{court.name}</span>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCourtId(court.id);
+                      setCourtForm({ name: court.name, isActive: court.isActive });
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button type="button" className={court.isActive ? "danger" : ""} onClick={() => onToggleCourtActive(court)}>
+                    {court.isActive ? "Deactivate" : "Activate"}
                   </button>
                 </div>
               </li>
