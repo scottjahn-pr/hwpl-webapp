@@ -13,6 +13,7 @@ export interface Team {
   id: string;
   name: string;
   leagueId: string;
+  isActive: boolean;
 }
 
 export interface Player {
@@ -22,6 +23,7 @@ export interface Player {
   email: string;
   duprId: string;
   defaultTeamId: string;
+  isActive: boolean;
 }
 
 export interface Match {

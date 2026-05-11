@@ -204,7 +204,7 @@ const handleAdminPlayers = async (request, id) => {
   try {
     if (request.method === "GET") {
       const result = await runQuery(`
-        SELECT id, first_name AS firstName, last_name AS lastName, email, dupr_id AS duprId, default_team_id AS defaultTeamId
+        SELECT id, first_name AS firstName, last_name AS lastName, email, dupr_id AS duprId, default_team_id AS defaultTeamId, is_active AS isActive
         FROM players
         ORDER BY first_name, last_name;
       `);
@@ -213,23 +213,21 @@ const handleAdminPlayers = async (request, id) => {
 
     const payload = await parseJson(request);
     if (!payload) return badRequest("Invalid JSON body.");
-    if (!payload.startDate) return badRequest("Field 'startDate' is required.");
-    if (!payload.endDate) return badRequest("Field 'endDate' is required.");
-    if (payload.endDate < payload.startDate) return badRequest("Field 'endDate' cannot be earlier than 'startDate'.");
 
     if (request.method === "POST") {
       const result = await runQuery(
         `
-        INSERT INTO players (first_name, last_name, email, dupr_id, default_team_id)
+        INSERT INTO players (first_name, last_name, email, dupr_id, default_team_id, is_active)
         OUTPUT INSERTED.id
-        VALUES (@firstName, @lastName, @email, @duprId, @defaultTeamId);
+        VALUES (@firstName, @lastName, @email, @duprId, @defaultTeamId, @isActive);
         `,
         [
           { name: "firstName", type: sql.NVarChar(120), value: payload.firstName },
           { name: "lastName", type: sql.NVarChar(120), value: payload.lastName },
           { name: "email", type: sql.NVarChar(250), value: payload.email },
           { name: "duprId", type: sql.NVarChar(100), value: payload.duprId },
-          { name: "defaultTeamId", type: sql.UniqueIdentifier, value: payload.defaultTeamId || null }
+          { name: "defaultTeamId", type: sql.UniqueIdentifier, value: payload.defaultTeamId || null },
+          { name: "isActive", type: sql.Bit, value: payload.isActive ?? true }
         ]
       );
       return json({ id: result.recordset[0].id }, 201);
@@ -245,7 +243,8 @@ const handleAdminPlayers = async (request, id) => {
             last_name = @lastName,
             email = @email,
             dupr_id = @duprId,
-            default_team_id = @defaultTeamId
+            default_team_id = @defaultTeamId,
+            is_active = @isActive
         WHERE id = @id;
         `,
         [
@@ -254,14 +253,15 @@ const handleAdminPlayers = async (request, id) => {
           { name: "lastName", type: sql.NVarChar(120), value: payload.lastName },
           { name: "email", type: sql.NVarChar(250), value: payload.email },
           { name: "duprId", type: sql.NVarChar(100), value: payload.duprId },
-          { name: "defaultTeamId", type: sql.UniqueIdentifier, value: payload.defaultTeamId || null }
+          { name: "defaultTeamId", type: sql.UniqueIdentifier, value: payload.defaultTeamId || null },
+          { name: "isActive", type: sql.Bit, value: payload.isActive ?? true }
         ]
       );
       return json({ updated: true });
     }
 
-    await runQuery("DELETE FROM players WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
-    return json({ deleted: true });
+    await runQuery("UPDATE players SET is_active = 0 WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
+    return json({ deactivated: true });
   } catch (error) {
     return serverError(error.message);
   }
@@ -273,7 +273,7 @@ const handleAdminTeams = async (request, id) => {
 
   try {
     if (request.method === "GET") {
-      const result = await runQuery("SELECT id, name, league_id AS leagueId FROM teams ORDER BY name;");
+      const result = await runQuery("SELECT id, name, league_id AS leagueId, is_active AS isActive FROM teams ORDER BY name;");
       return json(result.recordset);
     }
 
@@ -282,10 +282,11 @@ const handleAdminTeams = async (request, id) => {
 
     if (request.method === "POST") {
       const result = await runQuery(
-        "INSERT INTO teams (name, league_id) OUTPUT INSERTED.id VALUES (@name, @leagueId);",
+        "INSERT INTO teams (name, league_id, is_active) OUTPUT INSERTED.id VALUES (@name, @leagueId, @isActive);",
         [
           { name: "name", type: sql.NVarChar(120), value: payload.name },
-          { name: "leagueId", type: sql.UniqueIdentifier, value: payload.leagueId }
+          { name: "leagueId", type: sql.UniqueIdentifier, value: payload.leagueId },
+          { name: "isActive", type: sql.Bit, value: payload.isActive ?? true }
         ]
       );
       return json({ id: result.recordset[0].id }, 201);
@@ -295,18 +296,19 @@ const handleAdminTeams = async (request, id) => {
 
     if (request.method === "PUT") {
       await runQuery(
-        "UPDATE teams SET name = @name, league_id = @leagueId WHERE id = @id;",
+        "UPDATE teams SET name = @name, league_id = @leagueId, is_active = @isActive WHERE id = @id;",
         [
           { name: "id", type: sql.UniqueIdentifier, value: id },
           { name: "name", type: sql.NVarChar(120), value: payload.name },
-          { name: "leagueId", type: sql.UniqueIdentifier, value: payload.leagueId }
+          { name: "leagueId", type: sql.UniqueIdentifier, value: payload.leagueId },
+          { name: "isActive", type: sql.Bit, value: payload.isActive ?? true }
         ]
       );
       return json({ updated: true });
     }
 
-    await runQuery("DELETE FROM teams WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
-    return json({ deleted: true });
+    await runQuery("UPDATE teams SET is_active = 0 WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
+    return json({ deactivated: true });
   } catch (error) {
     return serverError(error.message);
   }
@@ -324,6 +326,9 @@ const handleAdminLeagues = async (request, id) => {
 
     const payload = await parseJson(request);
     if (!payload) return badRequest("Invalid JSON body.");
+    if (!payload.startDate) return badRequest("Field 'startDate' is required.");
+    if (!payload.endDate) return badRequest("Field 'endDate' is required.");
+    if (payload.endDate < payload.startDate) return badRequest("Field 'endDate' cannot be earlier than 'startDate'.");
 
     if (request.method === "POST") {
       const result = await runQuery(
@@ -354,8 +359,8 @@ const handleAdminLeagues = async (request, id) => {
       return json({ updated: true });
     }
 
-    await runQuery("DELETE FROM leagues WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
-    return json({ deleted: true });
+    await runQuery("UPDATE leagues SET is_active = 0 WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
+    return json({ deactivated: true });
   } catch (error) {
     return serverError(error.message);
   }

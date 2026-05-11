@@ -20,6 +20,7 @@ CREATE TABLE dbo.teams (
   id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWID(),
   name NVARCHAR(120) NOT NULL,
   league_id UNIQUEIDENTIFIER NOT NULL,
+  is_active BIT NOT NULL DEFAULT 1,
   created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
   CONSTRAINT FK_teams_league FOREIGN KEY (league_id) REFERENCES dbo.leagues(id)
 );
@@ -31,6 +32,7 @@ CREATE TABLE dbo.players (
   email NVARCHAR(250) NOT NULL,
   dupr_id NVARCHAR(100) NOT NULL,
   default_team_id UNIQUEIDENTIFIER NULL,
+  is_active BIT NOT NULL DEFAULT 1,
   created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
   CONSTRAINT FK_players_default_team FOREIGN KEY (default_team_id) REFERENCES dbo.teams(id)
 );

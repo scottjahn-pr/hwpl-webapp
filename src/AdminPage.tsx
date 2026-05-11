@@ -75,12 +75,14 @@ const emptyPlayerForm: PlayerForm = {
   lastName: "",
   email: "",
   duprId: "",
-  defaultTeamId: ""
+  defaultTeamId: "",
+  isActive: true
 };
 
 const emptyTeamForm: TeamForm = {
   name: "",
-  leagueId: ""
+  leagueId: "",
+  isActive: true
 };
 
 const emptyLeagueForm: LeagueForm = {
@@ -136,6 +138,10 @@ function AdminPage() {
   const [adminMessage, setAdminMessage] = useState("");
   const [csvDate, setCsvDate] = useState(new Date().toISOString().slice(0, 10));
   const [adminApiBase, setAdminApiBase] = useState("/api/ops");
+
+  const activeLeagues = useMemo(() => leagues.filter((league) => league.isActive), [leagues]);
+  const activeTeams = useMemo(() => teams.filter((team) => team.isActive), [teams]);
+  const activePlayers = useMemo(() => players.filter((player) => player.isActive), [players]);
 
   const formatLeagueDates = (league: Pick<League, "startDate" | "endDate">) => `${league.startDate} to ${league.endDate}`;
 
@@ -254,17 +260,21 @@ function AdminPage() {
     setPlayers(loadedPlayers);
     setMatches(loadedMatches);
 
-    setPlayerForm((prev) => ({ ...prev, defaultTeamId: prev.defaultTeamId || loadedTeams[0]?.id || "" }));
-    setTeamForm((prev) => ({ ...prev, leagueId: prev.leagueId || loadedLeagues[0]?.id || "" }));
+    const activeLoadedLeagues = loadedLeagues.filter((league) => league.isActive);
+    const activeLoadedTeams = loadedTeams.filter((team) => team.isActive);
+    const activeLoadedPlayers = loadedPlayers.filter((player) => player.isActive);
+
+    setPlayerForm((prev) => ({ ...prev, defaultTeamId: prev.defaultTeamId || activeLoadedTeams[0]?.id || "" }));
+    setTeamForm((prev) => ({ ...prev, leagueId: prev.leagueId || activeLoadedLeagues[0]?.id || "" }));
     setMatchForm((prev) => ({
       ...prev,
-      leagueId: prev.leagueId || loadedLeagues[0]?.id || "",
-      teamAId: prev.teamAId || loadedTeams[0]?.id || "",
-      teamBId: prev.teamBId || loadedTeams[1]?.id || loadedTeams[0]?.id || "",
-      teamAPlayer1: prev.teamAPlayer1 || loadedPlayers[0]?.id || "",
-      teamAPlayer2: prev.teamAPlayer2 || loadedPlayers[1]?.id || "",
-      teamBPlayer1: prev.teamBPlayer1 || loadedPlayers[2]?.id || "",
-      teamBPlayer2: prev.teamBPlayer2 || loadedPlayers[3]?.id || ""
+      leagueId: prev.leagueId || activeLoadedLeagues[0]?.id || "",
+      teamAId: prev.teamAId || activeLoadedTeams[0]?.id || "",
+      teamBId: prev.teamBId || activeLoadedTeams[1]?.id || activeLoadedTeams[0]?.id || "",
+      teamAPlayer1: prev.teamAPlayer1 || activeLoadedPlayers[0]?.id || "",
+      teamAPlayer2: prev.teamAPlayer2 || activeLoadedPlayers[1]?.id || "",
+      teamBPlayer1: prev.teamBPlayer1 || activeLoadedPlayers[2]?.id || "",
+      teamBPlayer2: prev.teamBPlayer2 || activeLoadedPlayers[3]?.id || ""
     }));
   }, [adminApiBase]);
 
@@ -334,7 +344,7 @@ function AdminPage() {
       if (!res.ok) throw new Error("failed");
       setAdminMessage(editingPlayerId ? "Player updated." : "Player added.");
       setEditingPlayerId(null);
-      setPlayerForm({ ...emptyPlayerForm, defaultTeamId: teams[0]?.id ?? "" });
+      setPlayerForm({ ...emptyPlayerForm, defaultTeamId: activeTeams[0]?.id ?? "" });
       await loadAdminData();
     } catch {
       setAdminMessage("Error saving player.");
@@ -352,7 +362,7 @@ function AdminPage() {
       if (!res.ok) throw new Error("failed");
       setAdminMessage(editingTeamId ? "Team updated." : "Team added.");
       setEditingTeamId(null);
-      setTeamForm({ ...emptyTeamForm, leagueId: leagues[0]?.id ?? "" });
+      setTeamForm({ ...emptyTeamForm, leagueId: activeLeagues[0]?.id ?? "" });
       await loadAdminData();
     } catch {
       setAdminMessage("Error saving team.");
@@ -387,36 +397,64 @@ function AdminPage() {
     }
   };
 
-  const onDeletePlayer = async (playerId: string) => {
+  const onTogglePlayerActive = async (player: Player) => {
     try {
-      const res = await authFetch(`${adminApiBase}/players/${playerId}`, { method: "DELETE" });
+      const res = await authFetch(`${adminApiBase}/players/${player.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: player.firstName,
+          lastName: player.lastName,
+          email: player.email,
+          duprId: player.duprId,
+          defaultTeamId: player.defaultTeamId,
+          isActive: !player.isActive
+        })
+      });
       if (!res.ok) throw new Error("failed");
-      setAdminMessage("Player removed.");
+      setAdminMessage(player.isActive ? "Player deactivated." : "Player activated.");
       await loadAdminData();
     } catch {
-      setAdminMessage("Error removing player.");
+      setAdminMessage("Error updating player status.");
     }
   };
 
-  const onDeleteTeam = async (teamId: string) => {
+  const onToggleTeamActive = async (team: Team) => {
     try {
-      const res = await authFetch(`${adminApiBase}/teams/${teamId}`, { method: "DELETE" });
+      const res = await authFetch(`${adminApiBase}/teams/${team.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: team.name,
+          leagueId: team.leagueId,
+          isActive: !team.isActive
+        })
+      });
       if (!res.ok) throw new Error("failed");
-      setAdminMessage("Team removed.");
+      setAdminMessage(team.isActive ? "Team deactivated." : "Team activated.");
       await loadAdminData();
     } catch {
-      setAdminMessage("Error removing team.");
+      setAdminMessage("Error updating team status.");
     }
   };
 
-  const onDeleteLeague = async (leagueId: string) => {
+  const onToggleLeagueActive = async (league: League) => {
     try {
-      const res = await authFetch(`${adminApiBase}/leagues/${leagueId}`, { method: "DELETE" });
+      const res = await authFetch(`${adminApiBase}/leagues/${league.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: league.name,
+          startDate: league.startDate,
+          endDate: league.endDate,
+          isActive: !league.isActive
+        })
+      });
       if (!res.ok) throw new Error("failed");
-      setAdminMessage("League removed.");
+      setAdminMessage(league.isActive ? "League deactivated." : "League activated.");
       await loadAdminData();
     } catch {
-      setAdminMessage("Error removing league.");
+      setAdminMessage("Error updating league status.");
     }
   };
 
@@ -593,7 +631,7 @@ function AdminPage() {
             <label>
               League
               <select value={matchForm.leagueId} onChange={(e) => setMatchForm((prev) => ({ ...prev, leagueId: e.target.value }))} required>
-                {leagues.map((league) => (
+                {activeLeagues.map((league) => (
                   <option key={league.id} value={league.id}>
                     {league.name} ({formatLeagueDates(league)})
                   </option>
@@ -608,7 +646,7 @@ function AdminPage() {
               <label>
                 Team A
                 <select value={matchForm.teamAId} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAId: e.target.value }))} required>
-                  {teams.map((team) => (
+                  {activeTeams.map((team) => (
                     <option key={team.id} value={team.id}>
                       {team.name}
                     </option>
@@ -618,7 +656,7 @@ function AdminPage() {
               <label>
                 Team B
                 <select value={matchForm.teamBId} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBId: e.target.value }))} required>
-                  {teams.map((team) => (
+                  {activeTeams.map((team) => (
                     <option key={team.id} value={team.id}>
                       {team.name}
                     </option>
@@ -630,7 +668,7 @@ function AdminPage() {
               <label>
                 Team A - Player 1
                 <select value={matchForm.teamAPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer1: e.target.value }))}>
-                  {players.map((player) => (
+                  {activePlayers.map((player) => (
                     <option key={player.id} value={player.id}>
                       {player.firstName} {player.lastName}
                     </option>
@@ -640,7 +678,7 @@ function AdminPage() {
               <label>
                 Team A - Player 2
                 <select value={matchForm.teamAPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer2: e.target.value }))}>
-                  {players.map((player) => (
+                  {activePlayers.map((player) => (
                     <option key={player.id} value={player.id}>
                       {player.firstName} {player.lastName}
                     </option>
@@ -650,7 +688,7 @@ function AdminPage() {
               <label>
                 Team B - Player 1
                 <select value={matchForm.teamBPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer1: e.target.value }))}>
-                  {players.map((player) => (
+                  {activePlayers.map((player) => (
                     <option key={player.id} value={player.id}>
                       {player.firstName} {player.lastName}
                     </option>
@@ -660,7 +698,7 @@ function AdminPage() {
               <label>
                 Team B - Player 2
                 <select value={matchForm.teamBPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer2: e.target.value }))}>
-                  {players.map((player) => (
+                  {activePlayers.map((player) => (
                     <option key={player.id} value={player.id}>
                       {player.firstName} {player.lastName}
                     </option>
@@ -731,7 +769,7 @@ function AdminPage() {
         <article className="panel module-manage-players">
           <div className="panel-header">
             <h3>Manage Players</h3>
-            <p>Add, remove, or modify player records.</p>
+            <p>Add, activate/deactivate, or modify player records.</p>
           </div>
           <form className="match-form" onSubmit={onSavePlayer}>
             <div className="teams-grid">
@@ -758,7 +796,7 @@ function AdminPage() {
                   onChange={(e) => setPlayerForm((prev) => ({ ...prev, defaultTeamId: e.target.value }))}
                   required
                 >
-                  {teams.map((team) => (
+                  {activeTeams.map((team) => (
                     <option key={team.id} value={team.id}>
                       {team.name}
                     </option>
@@ -782,14 +820,15 @@ function AdminPage() {
                         lastName: player.lastName,
                         email: player.email,
                         duprId: player.duprId,
-                        defaultTeamId: player.defaultTeamId
+                        defaultTeamId: player.defaultTeamId,
+                        isActive: player.isActive
                       });
                     }}
                   >
                     Edit
                   </button>
-                  <button type="button" className="danger" onClick={() => onDeletePlayer(player.id)}>
-                    Remove
+                  <button type="button" className={player.isActive ? "danger" : ""} onClick={() => onTogglePlayerActive(player)}>
+                    {player.isActive ? "Deactivate" : "Activate"}
                   </button>
                 </div>
               </li>
@@ -800,7 +839,7 @@ function AdminPage() {
         <article className="panel module-manage-teams">
           <div className="panel-header">
             <h3>Manage Teams</h3>
-            <p>Add, remove, or modify team records.</p>
+            <p>Add, activate/deactivate, or modify team records.</p>
           </div>
           <form className="match-form" onSubmit={onSaveTeam}>
             <label>
@@ -828,13 +867,13 @@ function AdminPage() {
                     type="button"
                     onClick={() => {
                       setEditingTeamId(team.id);
-                      setTeamForm({ name: team.name, leagueId: team.leagueId });
+                      setTeamForm({ name: team.name, leagueId: team.leagueId, isActive: team.isActive });
                     }}
                   >
                     Edit
                   </button>
-                  <button type="button" className="danger" onClick={() => onDeleteTeam(team.id)}>
-                    Remove
+                  <button type="button" className={team.isActive ? "danger" : ""} onClick={() => onToggleTeamActive(team)}>
+                    {team.isActive ? "Deactivate" : "Activate"}
                   </button>
                 </div>
               </li>
@@ -845,7 +884,7 @@ function AdminPage() {
         <article className="panel module-manage-leagues">
           <div className="panel-header">
             <h3>Manage Leagues</h3>
-            <p>Add, remove, or modify leagues.</p>
+            <p>Add, activate/deactivate, or modify leagues.</p>
           </div>
           <form className="match-form" onSubmit={onSaveLeague}>
             <label>
@@ -901,8 +940,8 @@ function AdminPage() {
                   >
                     Edit
                   </button>
-                  <button type="button" className="danger" onClick={() => onDeleteLeague(league.id)}>
-                    Remove
+                  <button type="button" className={league.isActive ? "danger" : ""} onClick={() => onToggleLeagueActive(league)}>
+                    {league.isActive ? "Deactivate" : "Activate"}
                   </button>
                 </div>
               </li>
