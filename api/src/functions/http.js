@@ -273,38 +273,75 @@ const handleAdminTeams = async (request, id) => {
 
   try {
     if (request.method === "GET") {
-      const result = await runQuery("SELECT id, name, league_id AS leagueId, is_active AS isActive FROM teams ORDER BY name;");
-      return json(result.recordset);
+      const result = await runQuery(`
+        SELECT t.id, t.name, t.is_active AS isActive,
+               STRING_AGG(CAST(tl.league_id AS NVARCHAR(36)), ',') AS leagueIds
+        FROM teams t
+        LEFT JOIN team_leagues tl ON tl.team_id = t.id
+        GROUP BY t.id, t.name, t.is_active
+        ORDER BY t.name;
+      `);
+      return json(result.recordset.map((r) => ({
+        id: r.id,
+        name: r.name,
+        isActive: Boolean(r.isActive),
+        leagueIds: r.leagueIds ? r.leagueIds.split(",") : []
+      })));
     }
 
     const payload = await parseJson(request);
     if (!payload) return badRequest("Invalid JSON body.");
 
+    const pool = await getPool();
+    const tx = new sql.Transaction(pool);
+
     if (request.method === "POST") {
-      const result = await runQuery(
-        "INSERT INTO teams (name, league_id, is_active) OUTPUT INSERTED.id VALUES (@name, @leagueId, @isActive);",
-        [
-          { name: "name", type: sql.NVarChar(120), value: payload.name },
-          { name: "leagueId", type: sql.UniqueIdentifier, value: payload.leagueId },
-          { name: "isActive", type: sql.Bit, value: payload.isActive ?? true }
-        ]
-      );
-      return json({ id: result.recordset[0].id }, 201);
+      try {
+        await tx.begin();
+        const teamReq = new sql.Request(tx);
+        teamReq.input("name", sql.NVarChar(120), payload.name);
+        teamReq.input("isActive", sql.Bit, payload.isActive ?? true);
+        const teamResult = await teamReq.query("INSERT INTO teams (name, is_active) OUTPUT INSERTED.id VALUES (@name, @isActive);");
+        const teamId = teamResult.recordset[0].id;
+        for (const leagueId of (payload.leagueIds ?? [])) {
+          const tlReq = new sql.Request(tx);
+          tlReq.input("teamId", sql.UniqueIdentifier, teamId);
+          tlReq.input("leagueId", sql.UniqueIdentifier, leagueId);
+          await tlReq.query("INSERT INTO team_leagues (team_id, league_id) VALUES (@teamId, @leagueId);");
+        }
+        await tx.commit();
+        return json({ id: teamId }, 201);
+      } catch (error) {
+        await tx.rollback();
+        throw error;
+      }
     }
 
     if (!id) return badRequest("Missing route parameter: id.");
 
     if (request.method === "PUT") {
-      await runQuery(
-        "UPDATE teams SET name = @name, league_id = @leagueId, is_active = @isActive WHERE id = @id;",
-        [
-          { name: "id", type: sql.UniqueIdentifier, value: id },
-          { name: "name", type: sql.NVarChar(120), value: payload.name },
-          { name: "leagueId", type: sql.UniqueIdentifier, value: payload.leagueId },
-          { name: "isActive", type: sql.Bit, value: payload.isActive ?? true }
-        ]
-      );
-      return json({ updated: true });
+      try {
+        await tx.begin();
+        const teamReq = new sql.Request(tx);
+        teamReq.input("id", sql.UniqueIdentifier, id);
+        teamReq.input("name", sql.NVarChar(120), payload.name);
+        teamReq.input("isActive", sql.Bit, payload.isActive ?? true);
+        await teamReq.query("UPDATE teams SET name = @name, is_active = @isActive WHERE id = @id;");
+        const deleteReq = new sql.Request(tx);
+        deleteReq.input("teamId", sql.UniqueIdentifier, id);
+        await deleteReq.query("DELETE FROM team_leagues WHERE team_id = @teamId;");
+        for (const leagueId of (payload.leagueIds ?? [])) {
+          const tlReq = new sql.Request(tx);
+          tlReq.input("teamId", sql.UniqueIdentifier, id);
+          tlReq.input("leagueId", sql.UniqueIdentifier, leagueId);
+          await tlReq.query("INSERT INTO team_leagues (team_id, league_id) VALUES (@teamId, @leagueId);");
+        }
+        await tx.commit();
+        return json({ updated: true });
+      } catch (error) {
+        await tx.rollback();
+        throw error;
+      }
     }
 
     await runQuery("UPDATE teams SET is_active = 0 WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);

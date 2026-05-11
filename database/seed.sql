@@ -10,12 +10,19 @@ VALUES
 (@leaguePremier, 'HWPL Premier', '2026-03-01', '2026-06-30', 1),
 (@leagueSocial, 'HWPL Social', '2026-03-01', '2026-06-30', 1);
 
-INSERT INTO dbo.teams (id, name, league_id, is_active)
+INSERT INTO dbo.teams (id, name, is_active)
 VALUES
-(@teamRiver, 'River Volleys', @leaguePremier, 1),
-(@teamBarrel, 'Barrel Smash', @leaguePremier, 1),
-(@teamKitchen, 'Kitchen Kings', @leagueSocial, 1),
-(@teamBaseline, 'Baseline Crew', @leagueSocial, 1);
+(@teamRiver, 'River Volleys', 1),
+(@teamBarrel, 'Barrel Smash', 1),
+(@teamKitchen, 'Kitchen Kings', 1),
+(@teamBaseline, 'Baseline Crew', 1);
+
+INSERT INTO dbo.team_leagues (team_id, league_id)
+VALUES
+(@teamRiver,    @leaguePremier),
+(@teamBarrel,   @leaguePremier),
+(@teamKitchen,  @leagueSocial),
+(@teamBaseline, @leagueSocial);
 
 INSERT INTO dbo.players (first_name, last_name, email, dupr_id, default_team_id, is_active)
 VALUES

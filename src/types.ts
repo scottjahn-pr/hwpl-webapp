@@ -12,7 +12,7 @@ export interface League {
 export interface Team {
   id: string;
   name: string;
-  leagueId: string;
+  leagueIds: string[];
   isActive: boolean;
 }
 

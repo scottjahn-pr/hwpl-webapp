@@ -54,7 +54,7 @@ interface ManagedMatch {
 }
 
 type PlayerForm = Omit<Player, "id">;
-type TeamForm = Omit<Team, "id">;
+type TeamForm = { name: string; leagueIds: string[]; isActive: boolean };
 type LeagueForm = Omit<League, "id">;
 
 interface MatchForm {
@@ -81,7 +81,7 @@ const emptyPlayerForm: PlayerForm = {
 
 const emptyTeamForm: TeamForm = {
   name: "",
-  leagueId: "",
+  leagueIds: [],
   isActive: true
 };
 
@@ -265,7 +265,6 @@ function AdminPage() {
     const activeLoadedPlayers = loadedPlayers.filter((player) => player.isActive);
 
     setPlayerForm((prev) => ({ ...prev, defaultTeamId: prev.defaultTeamId || activeLoadedTeams[0]?.id || "" }));
-    setTeamForm((prev) => ({ ...prev, leagueId: prev.leagueId || activeLoadedLeagues[0]?.id || "" }));
     setMatchForm((prev) => ({
       ...prev,
       leagueId: prev.leagueId || activeLoadedLeagues[0]?.id || "",
@@ -362,7 +361,7 @@ function AdminPage() {
       if (!res.ok) throw new Error("failed");
       setAdminMessage(editingTeamId ? "Team updated." : "Team added.");
       setEditingTeamId(null);
-      setTeamForm({ ...emptyTeamForm, leagueId: activeLeagues[0]?.id ?? "" });
+      setTeamForm({ ...emptyTeamForm });
       await loadAdminData();
     } catch {
       setAdminMessage("Error saving team.");
@@ -426,7 +425,7 @@ function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: team.name,
-          leagueId: team.leagueId,
+          leagueIds: team.leagueIds,
           isActive: !team.isActive
         })
       });
@@ -846,28 +845,42 @@ function AdminPage() {
               Team Name
               <input value={teamForm.name} onChange={(e) => setTeamForm((prev) => ({ ...prev, name: e.target.value }))} required />
             </label>
-            <label>
-              League
-              <select value={teamForm.leagueId} onChange={(e) => setTeamForm((prev) => ({ ...prev, leagueId: e.target.value }))} required>
-                {leagues.map((league) => (
-                  <option key={league.id} value={league.id}>
-                    {league.name} ({formatLeagueDates(league)})
-                  </option>
-                ))}
-              </select>
-            </label>
+            <fieldset style={{ border: "1px solid #ccc", borderRadius: 4, padding: "8px 12px" }}>
+              <legend>Leagues</legend>
+              {leagues.map((league) => (
+                <label key={league.id} style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: "normal", marginBottom: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={teamForm.leagueIds.includes(league.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setTeamForm((prev) => ({ ...prev, leagueIds: [...prev.leagueIds, league.id] }));
+                      } else {
+                        setTeamForm((prev) => ({ ...prev, leagueIds: prev.leagueIds.filter((lid) => lid !== league.id) }));
+                      }
+                    }}
+                  />
+                  {league.name} ({formatLeagueDates(league)})
+                </label>
+              ))}
+            </fieldset>
             <button type="submit">{editingTeamId ? "Update Team" : "Add Team"}</button>
           </form>
           <ul className="entity-list">
             {teams.map((team) => (
               <li key={team.id}>
-                <span>{team.name} - {leagueNameById.get(team.leagueId)}</span>
+                <span>
+                  {team.name}
+                  {team.leagueIds.length > 0 && (
+                    <> - {team.leagueIds.map((lid) => leagueNameById.get(lid) ?? lid).join(", ")}</>
+                  )}
+                </span>
                 <div>
                   <button
                     type="button"
                     onClick={() => {
                       setEditingTeamId(team.id);
-                      setTeamForm({ name: team.name, leagueId: team.leagueId, isActive: team.isActive });
+                      setTeamForm({ name: team.name, leagueIds: team.leagueIds, isActive: team.isActive });
                     }}
                   >
                     Edit

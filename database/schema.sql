@@ -4,6 +4,7 @@ SET QUOTED_IDENTIFIER ON;
 IF OBJECT_ID('dbo.match_participants', 'U') IS NOT NULL DROP TABLE dbo.match_participants;
 IF OBJECT_ID('dbo.matches', 'U') IS NOT NULL DROP TABLE dbo.matches;
 IF OBJECT_ID('dbo.players', 'U') IS NOT NULL DROP TABLE dbo.players;
+IF OBJECT_ID('dbo.team_leagues', 'U') IS NOT NULL DROP TABLE dbo.team_leagues;
 IF OBJECT_ID('dbo.teams', 'U') IS NOT NULL DROP TABLE dbo.teams;
 IF OBJECT_ID('dbo.leagues', 'U') IS NOT NULL DROP TABLE dbo.leagues;
 
@@ -19,10 +20,16 @@ CREATE TABLE dbo.leagues (
 CREATE TABLE dbo.teams (
   id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWID(),
   name NVARCHAR(120) NOT NULL,
-  league_id UNIQUEIDENTIFIER NOT NULL,
   is_active BIT NOT NULL DEFAULT 1,
-  created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-  CONSTRAINT FK_teams_league FOREIGN KEY (league_id) REFERENCES dbo.leagues(id)
+  created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+
+CREATE TABLE dbo.team_leagues (
+  team_id   UNIQUEIDENTIFIER NOT NULL,
+  league_id UNIQUEIDENTIFIER NOT NULL,
+  CONSTRAINT PK_team_leagues PRIMARY KEY (team_id, league_id),
+  CONSTRAINT FK_team_leagues_team   FOREIGN KEY (team_id)   REFERENCES dbo.teams(id),
+  CONSTRAINT FK_team_leagues_league FOREIGN KEY (league_id) REFERENCES dbo.leagues(id)
 );
 
 CREATE TABLE dbo.players (
