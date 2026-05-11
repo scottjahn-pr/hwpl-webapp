@@ -156,7 +156,7 @@ function App() {
       <section className="panel">
         <div className="panel-header">
           <h3>League Stats</h3>
-          <p>Aggregated totals by league and season.</p>
+          <p>Aggregated totals by league and start date.</p>
         </div>
         <div className="table-wrap">
           <table>
@@ -171,7 +171,7 @@ function App() {
             <tbody>
               {leagueStats.map((row) => (
                 <tr key={row.id}>
-                  <td>{row.name} ({row.season})</td>
+                  <td>{row.name} ({row.startDate})</td>
                   <td>{row.matches}</td>
                   <td>{row.avgPointsPerMatch.toFixed(1)}</td>
                   <td>{row.isActive ? "Yes" : "No"}</td>

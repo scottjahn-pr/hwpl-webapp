@@ -4,7 +4,7 @@ export type Persona = "user" | "admin";
 export interface League {
   id: string;
   name: string;
-  season: string;
+  startDate: string;
   isActive: boolean;
 }
 
@@ -50,7 +50,7 @@ export interface StatsRow {
 export interface LeagueStatRow {
   id: string;
   name: string;
-  season: string;
+  startDate: string;
   isActive: boolean;
   matches: number;
   avgPointsPerMatch: number;

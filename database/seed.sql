@@ -5,10 +5,10 @@ DECLARE @teamBarrel UNIQUEIDENTIFIER = NEWID();
 DECLARE @teamKitchen UNIQUEIDENTIFIER = NEWID();
 DECLARE @teamBaseline UNIQUEIDENTIFIER = NEWID();
 
-INSERT INTO dbo.leagues (id, name, season, is_active)
+INSERT INTO dbo.leagues (id, name, start_date, is_active)
 VALUES
-(@leaguePremier, 'HWPL Premier', 'Spring 2026', 1),
-(@leagueSocial, 'HWPL Social', 'Spring 2026', 1);
+(@leaguePremier, 'HWPL Premier', '2026-03-01', 1),
+(@leagueSocial, 'HWPL Social', '2026-03-01', 1);
 
 INSERT INTO dbo.teams (id, name, league_id)
 VALUES

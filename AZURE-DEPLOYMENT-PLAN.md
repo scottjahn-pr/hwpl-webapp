@@ -44,7 +44,7 @@ Suggested resource groups:
 
 ## Data Entities
 
-- leagues: id, name, season, is_active
+- leagues: id, name, start_date, is_active
 - teams: id, name, league_id
 - players: id, first_name, last_name, email, dupr_id, default_team_id
 - matches: id, league_id, match_date, team_a_id, team_b_id, score_a, score_b

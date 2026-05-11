@@ -179,14 +179,14 @@ app.http("statsLeagues", {
         SELECT
           l.id,
           l.name,
-          l.season,
+          CONVERT(varchar(10), l.start_date, 120) AS startDate,
           l.is_active AS isActive,
           COUNT(m.id) AS matches,
           CASE WHEN COUNT(m.id) = 0 THEN 0 ELSE CAST(SUM(m.score_a + m.score_b) AS float) / COUNT(m.id) END AS avgPointsPerMatch
         FROM leagues l
         LEFT JOIN matches m ON m.league_id = l.id
-        GROUP BY l.id, l.name, l.season, l.is_active
-        ORDER BY l.name, l.season;
+        GROUP BY l.id, l.name, l.start_date, l.is_active
+        ORDER BY l.start_date DESC, l.name;
       `);
 
       return json(result.recordset);
@@ -314,7 +314,7 @@ const handleAdminLeagues = async (request, id) => {
 
   try {
     if (request.method === "GET") {
-      const result = await runQuery("SELECT id, name, season, is_active AS isActive FROM leagues ORDER BY name, season;");
+      const result = await runQuery("SELECT id, name, CONVERT(varchar(10), start_date, 120) AS startDate, is_active AS isActive FROM leagues ORDER BY start_date DESC, name;");
       return json(result.recordset);
     }
 
@@ -323,10 +323,10 @@ const handleAdminLeagues = async (request, id) => {
 
     if (request.method === "POST") {
       const result = await runQuery(
-        "INSERT INTO leagues (name, season, is_active) OUTPUT INSERTED.id VALUES (@name, @season, @isActive);",
+        "INSERT INTO leagues (name, start_date, is_active) OUTPUT INSERTED.id VALUES (@name, @startDate, @isActive);",
         [
           { name: "name", type: sql.NVarChar(120), value: payload.name },
-          { name: "season", type: sql.NVarChar(80), value: payload.season },
+          { name: "startDate", type: sql.Date, value: payload.startDate },
           { name: "isActive", type: sql.Bit, value: Boolean(payload.isActive) }
         ]
       );
@@ -337,11 +337,11 @@ const handleAdminLeagues = async (request, id) => {
 
     if (request.method === "PUT") {
       await runQuery(
-        "UPDATE leagues SET name = @name, season = @season, is_active = @isActive WHERE id = @id;",
+        "UPDATE leagues SET name = @name, start_date = @startDate, is_active = @isActive WHERE id = @id;",
         [
           { name: "id", type: sql.UniqueIdentifier, value: id },
           { name: "name", type: sql.NVarChar(120), value: payload.name },
-          { name: "season", type: sql.NVarChar(80), value: payload.season },
+          { name: "startDate", type: sql.Date, value: payload.startDate },
           { name: "isActive", type: sql.Bit, value: Boolean(payload.isActive) }
         ]
       );
@@ -505,7 +505,7 @@ app.http("adminMatchesCollection", {
             m.team_b_id AS teamBId,
             m.score_a AS scoreA,
             m.score_b AS scoreB,
-            l.name + ' (' + l.season + ')' AS leagueName,
+            l.name + ' (' + CONVERT(varchar(10), l.start_date, 120) + ')' AS leagueName,
             ta.name AS teamAName,
             tb.name AS teamBName,
             mpa1.player_id AS teamAPlayer1,
@@ -600,7 +600,7 @@ app.http("duprExport", {
         `
         SELECT
           m.match_date AS matchDate,
-          l.name + ' (' + l.season + ')' AS league,
+          l.name + ' (' + CONVERT(varchar(10), l.start_date, 120) + ')' AS league,
           ta.name AS teamA,
           pa1.first_name + ' ' + pa1.last_name AS teamAPlayer1,
           pa2.first_name + ' ' + pa2.last_name AS teamAPlayer2,
