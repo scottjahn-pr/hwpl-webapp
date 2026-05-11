@@ -149,7 +149,7 @@ function AdminPage() {
   const formatLeagueDates = (league: Pick<League, "startDate" | "endDate">) => `${league.startDate} to ${league.endDate}`;
 
   const leagueNameById = useMemo(
-    () => new Map(leagues.map((l) => [l.id, `${l.name} (${formatLeagueDates(l)})`])),
+    () => new Map(leagues.map((l) => [l.id, l.name])),
     [leagues]
   );
 
@@ -640,7 +640,7 @@ function AdminPage() {
               <select value={matchForm.leagueId} onChange={(e) => setMatchForm((prev) => ({ ...prev, leagueId: e.target.value }))} required>
                 {activeLeagues.map((league) => (
                   <option key={league.id} value={league.id}>
-                    {league.name} ({formatLeagueDates(league)})
+                    {league.name}
                   </option>
                 ))}
               </select>
@@ -868,7 +868,7 @@ function AdminPage() {
                       }
                     }}
                   />
-                  {league.name} ({formatLeagueDates(league)})
+                  {league.name}
                 </label>
               ))}
             </fieldset>
