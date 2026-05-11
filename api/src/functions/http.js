@@ -206,7 +206,7 @@ const handleAdminPlayers = async (request, id) => {
   try {
     if (request.method === "GET") {
       const result = await runQuery(`
-        SELECT id, first_name AS firstName, last_name AS lastName, email, dupr_id AS duprId, default_team_id AS defaultTeamId, is_active AS isActive
+        SELECT id, first_name AS firstName, last_name AS lastName, dupr_id AS duprId, default_team_id AS defaultTeamId, is_active AS isActive
         FROM players
         ORDER BY first_name, last_name;
       `);
@@ -219,14 +219,13 @@ const handleAdminPlayers = async (request, id) => {
     if (request.method === "POST") {
       const result = await runQuery(
         `
-        INSERT INTO players (first_name, last_name, email, dupr_id, default_team_id, is_active)
+        INSERT INTO players (first_name, last_name, dupr_id, default_team_id, is_active)
         OUTPUT INSERTED.id
-        VALUES (@firstName, @lastName, @email, @duprId, @defaultTeamId, @isActive);
+        VALUES (@firstName, @lastName, @duprId, @defaultTeamId, @isActive);
         `,
         [
           { name: "firstName", type: sql.NVarChar(120), value: payload.firstName },
           { name: "lastName", type: sql.NVarChar(120), value: payload.lastName },
-          { name: "email", type: sql.NVarChar(250), value: payload.email },
           { name: "duprId", type: sql.NVarChar(100), value: payload.duprId },
           { name: "defaultTeamId", type: sql.UniqueIdentifier, value: payload.defaultTeamId || null },
           { name: "isActive", type: sql.Bit, value: payload.isActive ?? true }
@@ -243,7 +242,6 @@ const handleAdminPlayers = async (request, id) => {
         UPDATE players
         SET first_name = @firstName,
             last_name = @lastName,
-            email = @email,
             dupr_id = @duprId,
             default_team_id = @defaultTeamId,
             is_active = @isActive
@@ -253,7 +251,6 @@ const handleAdminPlayers = async (request, id) => {
           { name: "id", type: sql.UniqueIdentifier, value: id },
           { name: "firstName", type: sql.NVarChar(120), value: payload.firstName },
           { name: "lastName", type: sql.NVarChar(120), value: payload.lastName },
-          { name: "email", type: sql.NVarChar(250), value: payload.email },
           { name: "duprId", type: sql.NVarChar(100), value: payload.duprId },
           { name: "defaultTeamId", type: sql.UniqueIdentifier, value: payload.defaultTeamId || null },
           { name: "isActive", type: sql.Bit, value: payload.isActive ?? true }

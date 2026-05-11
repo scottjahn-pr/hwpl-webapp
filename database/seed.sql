@@ -30,13 +30,13 @@ VALUES
 ('Court 2', 1),
 ('Court 3', 1);
 
-INSERT INTO dbo.players (first_name, last_name, email, dupr_id, default_team_id, is_active)
+INSERT INTO dbo.players (first_name, last_name, dupr_id, default_team_id, is_active)
 VALUES
-('Avery', 'Martin', 'avery@example.com', 'D1001', @teamRiver, 1),
-('Jordan', 'Lee', 'jordan@example.com', 'D1002', @teamRiver, 1),
-('Casey', 'Nguyen', 'casey@example.com', 'D1003', @teamBarrel, 1),
-('Riley', 'Parker', 'riley@example.com', 'D1004', @teamBarrel, 1),
-('Blake', 'Thomas', 'blake@example.com', 'D1005', @teamKitchen, 1),
-('Morgan', 'Singh', 'morgan@example.com', 'D1006', @teamKitchen, 1),
-('Quinn', 'Hall', 'quinn@example.com', 'D1007', @teamBaseline, 1),
-('Taylor', 'Brooks', 'taylor@example.com', 'D1008', @teamBaseline, 1);
+('Avery', 'Martin', 'D1001', @teamRiver, 1),
+('Jordan', 'Lee', 'D1002', @teamRiver, 1),
+('Casey', 'Nguyen', 'D1003', @teamBarrel, 1),
+('Riley', 'Parker', 'D1004', @teamBarrel, 1),
+('Blake', 'Thomas', 'D1005', @teamKitchen, 1),
+('Morgan', 'Singh', 'D1006', @teamKitchen, 1),
+('Quinn', 'Hall', 'D1007', @teamBaseline, 1),
+('Taylor', 'Brooks', 'D1008', @teamBaseline, 1);

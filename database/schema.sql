@@ -44,7 +44,6 @@ CREATE TABLE dbo.players (
   id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWID(),
   first_name NVARCHAR(120) NOT NULL,
   last_name NVARCHAR(120) NOT NULL,
-  email NVARCHAR(250) NOT NULL,
   dupr_id NVARCHAR(100) NOT NULL,
   default_team_id UNIQUEIDENTIFIER NULL,
   is_active BIT NOT NULL DEFAULT 1,
@@ -93,7 +92,6 @@ CREATE TABLE dbo.match_participants (
   CONSTRAINT FK_participants_team FOREIGN KEY (team_id) REFERENCES dbo.teams(id)
 );
 
-CREATE UNIQUE INDEX UX_players_email ON dbo.players(email);
 CREATE UNIQUE INDEX UX_players_dupr_id ON dbo.players(dupr_id);
 CREATE UNIQUE INDEX UX_courts_name ON dbo.courts(name);
 CREATE UNIQUE INDEX UX_match_participants_unique_player ON dbo.match_participants(match_id, player_id);

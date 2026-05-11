@@ -81,7 +81,6 @@ interface MatchForm {
 const emptyPlayerForm: PlayerForm = {
   firstName: "",
   lastName: "",
-  email: "",
   duprId: "",
   defaultTeamId: "",
   isActive: true
@@ -165,6 +164,23 @@ function AdminPage() {
   const activeCourts = useMemo(() => courts.filter((court) => court.isActive), [courts]);
   const activeTeams = useMemo(() => teams.filter((team) => team.isActive), [teams]);
   const activePlayers = useMemo(() => players.filter((player) => player.isActive), [players]);
+
+  const getAvailablePlayersForSlot = (slot: "teamAPlayer1" | "teamAPlayer2" | "teamBPlayer1" | "teamBPlayer2") => {
+    const selected = {
+      teamAPlayer1: matchForm.teamAPlayer1,
+      teamAPlayer2: matchForm.teamAPlayer2,
+      teamBPlayer1: matchForm.teamBPlayer1,
+      teamBPlayer2: matchForm.teamBPlayer2
+    };
+
+    const taken = new Set(
+      Object.entries(selected)
+        .filter(([key, value]) => key !== slot && Boolean(value))
+        .map(([, value]) => value)
+    );
+
+    return activePlayers.filter((player) => !taken.has(player.id) || player.id === selected[slot]);
+  };
 
   const formatLeagueDates = (league: Pick<League, "startDate" | "endDate">) => `${league.startDate} to ${league.endDate}`;
 
@@ -456,7 +472,6 @@ function AdminPage() {
         body: JSON.stringify({
           firstName: player.firstName,
           lastName: player.lastName,
-          email: player.email,
           duprId: player.duprId,
           defaultTeamId: player.defaultTeamId,
           isActive: !player.isActive
@@ -789,7 +804,7 @@ function AdminPage() {
               <label>
                 Team A - Player 1
                 <select value={matchForm.teamAPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer1: e.target.value }))}>
-                  {activePlayers.map((player) => (
+                  {getAvailablePlayersForSlot("teamAPlayer1").map((player) => (
                     <option key={player.id} value={player.id}>
                       {player.firstName} {player.lastName}
                     </option>
@@ -799,7 +814,7 @@ function AdminPage() {
               <label>
                 Team A - Player 2
                 <select value={matchForm.teamAPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer2: e.target.value }))}>
-                  {activePlayers.map((player) => (
+                  {getAvailablePlayersForSlot("teamAPlayer2").map((player) => (
                     <option key={player.id} value={player.id}>
                       {player.firstName} {player.lastName}
                     </option>
@@ -809,7 +824,7 @@ function AdminPage() {
               <label>
                 Team B - Player 1
                 <select value={matchForm.teamBPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer1: e.target.value }))}>
-                  {activePlayers.map((player) => (
+                  {getAvailablePlayersForSlot("teamBPlayer1").map((player) => (
                     <option key={player.id} value={player.id}>
                       {player.firstName} {player.lastName}
                     </option>
@@ -819,7 +834,7 @@ function AdminPage() {
               <label>
                 Team B - Player 2
                 <select value={matchForm.teamBPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer2: e.target.value }))}>
-                  {activePlayers.map((player) => (
+                  {getAvailablePlayersForSlot("teamBPlayer2").map((player) => (
                     <option key={player.id} value={player.id}>
                       {player.firstName} {player.lastName}
                     </option>
@@ -903,10 +918,6 @@ function AdminPage() {
                 <input value={playerForm.lastName} onChange={(e) => setPlayerForm((prev) => ({ ...prev, lastName: e.target.value }))} required />
               </label>
               <label>
-                Email
-                <input type="email" value={playerForm.email} onChange={(e) => setPlayerForm((prev) => ({ ...prev, email: e.target.value }))} required />
-              </label>
-              <label>
                 DUPR ID
                 <input value={playerForm.duprId} onChange={(e) => setPlayerForm((prev) => ({ ...prev, duprId: e.target.value }))} required />
               </label>
@@ -939,7 +950,6 @@ function AdminPage() {
                       setPlayerForm({
                         firstName: player.firstName,
                         lastName: player.lastName,
-                        email: player.email,
                         duprId: player.duprId,
                         defaultTeamId: player.defaultTeamId,
                         isActive: player.isActive
