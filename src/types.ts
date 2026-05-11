@@ -5,6 +5,7 @@ export interface League {
   id: string;
   name: string;
   startDate: string;
+  endDate: string;
   isActive: boolean;
 }
 
@@ -51,6 +52,7 @@ export interface LeagueStatRow {
   id: string;
   name: string;
   startDate: string;
+  endDate: string;
   isActive: boolean;
   matches: number;
   avgPointsPerMatch: number;

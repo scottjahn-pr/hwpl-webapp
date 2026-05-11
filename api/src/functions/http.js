@@ -180,12 +180,13 @@ app.http("statsLeagues", {
           l.id,
           l.name,
           CONVERT(varchar(10), l.start_date, 120) AS startDate,
+          CONVERT(varchar(10), l.end_date, 120) AS endDate,
           l.is_active AS isActive,
           COUNT(m.id) AS matches,
           CASE WHEN COUNT(m.id) = 0 THEN 0 ELSE CAST(SUM(m.score_a + m.score_b) AS float) / COUNT(m.id) END AS avgPointsPerMatch
         FROM leagues l
         LEFT JOIN matches m ON m.league_id = l.id
-        GROUP BY l.id, l.name, l.start_date, l.is_active
+        GROUP BY l.id, l.name, l.start_date, l.end_date, l.is_active
         ORDER BY l.start_date DESC, l.name;
       `);
 
@@ -212,6 +213,9 @@ const handleAdminPlayers = async (request, id) => {
 
     const payload = await parseJson(request);
     if (!payload) return badRequest("Invalid JSON body.");
+    if (!payload.startDate) return badRequest("Field 'startDate' is required.");
+    if (!payload.endDate) return badRequest("Field 'endDate' is required.");
+    if (payload.endDate < payload.startDate) return badRequest("Field 'endDate' cannot be earlier than 'startDate'.");
 
     if (request.method === "POST") {
       const result = await runQuery(
@@ -314,7 +318,7 @@ const handleAdminLeagues = async (request, id) => {
 
   try {
     if (request.method === "GET") {
-      const result = await runQuery("SELECT id, name, CONVERT(varchar(10), start_date, 120) AS startDate, is_active AS isActive FROM leagues ORDER BY start_date DESC, name;");
+      const result = await runQuery("SELECT id, name, CONVERT(varchar(10), start_date, 120) AS startDate, CONVERT(varchar(10), end_date, 120) AS endDate, is_active AS isActive FROM leagues ORDER BY start_date DESC, name;");
       return json(result.recordset);
     }
 
@@ -323,10 +327,11 @@ const handleAdminLeagues = async (request, id) => {
 
     if (request.method === "POST") {
       const result = await runQuery(
-        "INSERT INTO leagues (name, start_date, is_active) OUTPUT INSERTED.id VALUES (@name, @startDate, @isActive);",
+        "INSERT INTO leagues (name, start_date, end_date, is_active) OUTPUT INSERTED.id VALUES (@name, @startDate, @endDate, @isActive);",
         [
           { name: "name", type: sql.NVarChar(120), value: payload.name },
           { name: "startDate", type: sql.Date, value: payload.startDate },
+          { name: "endDate", type: sql.Date, value: payload.endDate },
           { name: "isActive", type: sql.Bit, value: Boolean(payload.isActive) }
         ]
       );
@@ -337,11 +342,12 @@ const handleAdminLeagues = async (request, id) => {
 
     if (request.method === "PUT") {
       await runQuery(
-        "UPDATE leagues SET name = @name, start_date = @startDate, is_active = @isActive WHERE id = @id;",
+        "UPDATE leagues SET name = @name, start_date = @startDate, end_date = @endDate, is_active = @isActive WHERE id = @id;",
         [
           { name: "id", type: sql.UniqueIdentifier, value: id },
           { name: "name", type: sql.NVarChar(120), value: payload.name },
           { name: "startDate", type: sql.Date, value: payload.startDate },
+          { name: "endDate", type: sql.Date, value: payload.endDate },
           { name: "isActive", type: sql.Bit, value: Boolean(payload.isActive) }
         ]
       );

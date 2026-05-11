@@ -86,6 +86,7 @@ const emptyTeamForm: TeamForm = {
 const emptyLeagueForm: LeagueForm = {
   name: "",
   startDate: new Date().toISOString().slice(0, 10),
+  endDate: new Date().toISOString().slice(0, 10),
   isActive: true
 };
 
@@ -136,7 +137,12 @@ function AdminPage() {
   const [csvDate, setCsvDate] = useState(new Date().toISOString().slice(0, 10));
   const [adminApiBase, setAdminApiBase] = useState("/api/ops");
 
-  const leagueNameById = useMemo(() => new Map(leagues.map((l) => [l.id, `${l.name} (${l.startDate})`])), [leagues]);
+  const formatLeagueDates = (league: Pick<League, "startDate" | "endDate">) => `${league.startDate} to ${league.endDate}`;
+
+  const leagueNameById = useMemo(
+    () => new Map(leagues.map((l) => [l.id, `${l.name} (${formatLeagueDates(l)})`])),
+    [leagues]
+  );
 
   const extractObjectId = (entry: AuthMeLegacyEntry | AuthMeCurrentEntry | undefined): string => {
     if (!entry) return "";
@@ -355,6 +361,16 @@ function AdminPage() {
 
   const onSaveLeague = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!leagueForm.endDate) {
+      setAdminMessage("League end date is required.");
+      return;
+    }
+
+    if (leagueForm.endDate < leagueForm.startDate) {
+      setAdminMessage("League end date cannot be before start date.");
+      return;
+    }
+
     try {
       const res = await authFetch(editingLeagueId ? `${adminApiBase}/leagues/${editingLeagueId}` : `${adminApiBase}/leagues`, {
         method: editingLeagueId ? "PUT" : "POST",
@@ -579,7 +595,7 @@ function AdminPage() {
               <select value={matchForm.leagueId} onChange={(e) => setMatchForm((prev) => ({ ...prev, leagueId: e.target.value }))} required>
                 {leagues.map((league) => (
                   <option key={league.id} value={league.id}>
-                    {league.name} ({league.startDate})
+                    {league.name} ({formatLeagueDates(league)})
                   </option>
                 ))}
               </select>
@@ -796,7 +812,7 @@ function AdminPage() {
               <select value={teamForm.leagueId} onChange={(e) => setTeamForm((prev) => ({ ...prev, leagueId: e.target.value }))} required>
                 {leagues.map((league) => (
                   <option key={league.id} value={league.id}>
-                    {league.name} ({league.startDate})
+                    {league.name} ({formatLeagueDates(league)})
                   </option>
                 ))}
               </select>
@@ -846,6 +862,15 @@ function AdminPage() {
               />
             </label>
             <label>
+              End Date
+              <input
+                type="date"
+                value={leagueForm.endDate}
+                onChange={(e) => setLeagueForm((prev) => ({ ...prev, endDate: e.target.value }))}
+                required
+              />
+            </label>
+            <label>
               Active
               <select
                 value={leagueForm.isActive ? "yes" : "no"}
@@ -860,13 +885,18 @@ function AdminPage() {
           <ul className="entity-list">
             {leagues.map((league) => (
               <li key={league.id}>
-                <span>{league.name} ({league.startDate})</span>
+                <span>{league.name} ({formatLeagueDates(league)})</span>
                 <div>
                   <button
                     type="button"
                     onClick={() => {
                       setEditingLeagueId(league.id);
-                      setLeagueForm({ name: league.name, startDate: league.startDate, isActive: league.isActive });
+                      setLeagueForm({
+                        name: league.name,
+                        startDate: league.startDate,
+                        endDate: league.endDate,
+                        isActive: league.isActive
+                      });
                     }}
                   >
                     Edit

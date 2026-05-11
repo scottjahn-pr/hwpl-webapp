@@ -47,6 +47,19 @@ function App() {
   const totalPlayers = playerStats.length;
   const totalTeams = teamStats.length;
 
+  const formatLeagueWindow = useCallback((startDate: string, endDate: string) => {
+    const start = new Date(`${startDate}T00:00:00`);
+    const end = new Date(`${endDate}T00:00:00`);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      return `${startDate} - ${endDate}`;
+    }
+
+    const startMonth = new Intl.DateTimeFormat(undefined, { month: "long" }).format(start);
+    const endMonthYear = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(end);
+    return `${startMonth} - ${endMonthYear}`;
+  }, []);
+
   return (
     <main className="app-shell">
       <section className="hero">
@@ -156,7 +169,7 @@ function App() {
       <section className="panel">
         <div className="panel-header">
           <h3>League Stats</h3>
-          <p>Aggregated totals by league and start date.</p>
+          <p>Aggregated totals by league start and end dates.</p>
         </div>
         <div className="table-wrap">
           <table>
@@ -171,7 +184,7 @@ function App() {
             <tbody>
               {leagueStats.map((row) => (
                 <tr key={row.id}>
-                  <td>{row.name} ({row.startDate})</td>
+                  <td>{row.name} ({formatLeagueWindow(row.startDate, row.endDate)})</td>
                   <td>{row.matches}</td>
                   <td>{row.avgPointsPerMatch.toFixed(1)}</td>
                   <td>{row.isActive ? "Yes" : "No"}</td>
