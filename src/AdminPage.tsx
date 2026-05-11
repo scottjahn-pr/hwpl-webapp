@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { League, Player, Team } from "./types";
 
 interface AuthMeClaim {
@@ -118,6 +118,7 @@ function AdminPage() {
 
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const editingTeamIdRef = useRef<string | null>(null);
   const [editingLeagueId, setEditingLeagueId] = useState<string | null>(null);
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
 
@@ -138,6 +139,8 @@ function AdminPage() {
   const [adminMessage, setAdminMessage] = useState("");
   const [csvDate, setCsvDate] = useState(new Date().toISOString().slice(0, 10));
   const [adminApiBase, setAdminApiBase] = useState("/api/ops");
+
+  useEffect(() => { editingTeamIdRef.current = editingTeamId; }, [editingTeamId]);
 
   const activeLeagues = useMemo(() => leagues.filter((league) => league.isActive), [leagues]);
   const activeTeams = useMemo(() => teams.filter((team) => team.isActive), [teams]);
@@ -263,6 +266,11 @@ function AdminPage() {
     const activeLoadedLeagues = loadedLeagues.filter((league) => league.isActive);
     const activeLoadedTeams = loadedTeams.filter((team) => team.isActive);
     const activeLoadedPlayers = loadedPlayers.filter((player) => player.isActive);
+
+    if (!editingTeamIdRef.current) {
+      const activeLoadedLeagueIds = activeLoadedLeagues.map((l) => l.id);
+      setTeamForm((prev) => ({ ...prev, leagueIds: activeLoadedLeagueIds }));
+    }
 
     setPlayerForm((prev) => ({ ...prev, defaultTeamId: prev.defaultTeamId || activeLoadedTeams[0]?.id || "" }));
     setMatchForm((prev) => ({
