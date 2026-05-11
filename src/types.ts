@@ -35,9 +35,12 @@ export interface Player {
 export interface Match {
   id: string;
   leagueId: string;
+  courtId: string;
+  scoringType: "Standard" | "Rally";
+  gameType: "Doubles" | "Ladder";
   date: string;
-  teamAId: string;
-  teamBId: string;
+  teamAId: string | null;
+  teamBId: string | null;
   teamAPlayers: [string, string];
   teamBPlayers: [string, string];
   scoreA: number;

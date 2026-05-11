@@ -76,13 +76,13 @@ app.http("statsMatches", {
         SELECT TOP 10
           m.id,
           CONVERT(varchar(10), m.match_date, 120) AS date,
-          ta.name AS teamA,
-          tb.name AS teamB,
+          COALESCE(ta.name, 'Ladder Side A') AS teamA,
+          COALESCE(tb.name, 'Ladder Side B') AS teamB,
           m.score_a AS scoreA,
           m.score_b AS scoreB
         FROM matches m
-        JOIN teams ta ON ta.id = m.team_a_id
-        JOIN teams tb ON tb.id = m.team_b_id
+        LEFT JOIN teams ta ON ta.id = m.team_a_id
+        LEFT JOIN teams tb ON tb.id = m.team_b_id
         ORDER BY m.match_date DESC, m.created_at DESC;
       `);
       return json(result.recordset);
@@ -142,10 +142,12 @@ app.http("statsTeams", {
           SELECT team_a_id AS team_id, score_a AS points_for, score_b AS points_against,
             CASE WHEN score_a > score_b THEN 1 ELSE 0 END AS win
           FROM matches
+          WHERE game_type = 'Doubles' AND team_a_id IS NOT NULL AND team_b_id IS NOT NULL
           UNION ALL
           SELECT team_b_id AS team_id, score_b AS points_for, score_a AS points_against,
             CASE WHEN score_b > score_a THEN 1 ELSE 0 END AS win
           FROM matches
+          WHERE game_type = 'Doubles' AND team_a_id IS NOT NULL AND team_b_id IS NOT NULL
         )
         SELECT
           t.id,
@@ -497,6 +499,10 @@ app.http("adminCourtsItem", {
 });
 
 const saveMatch = async (payload, existingMatchId = null) => {
+  const gameType = payload.gameType === "Ladder" ? "Ladder" : "Doubles";
+  const scoringType = payload.scoringType === "Rally" ? "Rally" : "Standard";
+  const isDoubles = gameType === "Doubles";
+
   const allPlayers = [
     ...(payload.teamAPlayers ?? []),
     ...(payload.teamBPlayers ?? [])
@@ -510,6 +516,17 @@ const saveMatch = async (payload, existingMatchId = null) => {
     return badRequest("Players in a match must be unique.");
   }
 
+  if (!payload.courtId) {
+    return badRequest("Field 'courtId' is required.");
+  }
+
+  if (isDoubles && (!payload.teamAId || !payload.teamBId || payload.teamAId === payload.teamBId)) {
+    return badRequest("Doubles matches must include two distinct teams.");
+  }
+
+  const teamAId = isDoubles ? payload.teamAId : null;
+  const teamBId = isDoubles ? payload.teamBId : null;
+
   const pool = await getPool();
   const tx = new sql.Transaction(pool);
 
@@ -520,31 +537,40 @@ const saveMatch = async (payload, existingMatchId = null) => {
     if (!existingMatchId) {
       const insertRequest = new sql.Request(tx);
       insertRequest.input("leagueId", sql.UniqueIdentifier, payload.leagueId);
+      insertRequest.input("courtId", sql.UniqueIdentifier, payload.courtId);
+      insertRequest.input("scoringType", sql.NVarChar(20), scoringType);
+      insertRequest.input("gameType", sql.NVarChar(20), gameType);
       insertRequest.input("matchDate", sql.Date, payload.date);
-      insertRequest.input("teamAId", sql.UniqueIdentifier, payload.teamAId);
-      insertRequest.input("teamBId", sql.UniqueIdentifier, payload.teamBId);
+      insertRequest.input("teamAId", sql.UniqueIdentifier, teamAId);
+      insertRequest.input("teamBId", sql.UniqueIdentifier, teamBId);
       insertRequest.input("scoreA", sql.Int, payload.scoreA);
       insertRequest.input("scoreB", sql.Int, payload.scoreB);
 
       const matchResult = await insertRequest.query(`
-        INSERT INTO matches (league_id, match_date, team_a_id, team_b_id, score_a, score_b)
+        INSERT INTO matches (league_id, court_id, scoring_type, game_type, match_date, team_a_id, team_b_id, score_a, score_b)
         OUTPUT INSERTED.id
-        VALUES (@leagueId, @matchDate, @teamAId, @teamBId, @scoreA, @scoreB);
+        VALUES (@leagueId, @courtId, @scoringType, @gameType, @matchDate, @teamAId, @teamBId, @scoreA, @scoreB);
       `);
       matchId = matchResult.recordset[0].id;
     } else {
       const updateRequest = new sql.Request(tx);
       updateRequest.input("id", sql.UniqueIdentifier, existingMatchId);
       updateRequest.input("leagueId", sql.UniqueIdentifier, payload.leagueId);
+      updateRequest.input("courtId", sql.UniqueIdentifier, payload.courtId);
+      updateRequest.input("scoringType", sql.NVarChar(20), scoringType);
+      updateRequest.input("gameType", sql.NVarChar(20), gameType);
       updateRequest.input("matchDate", sql.Date, payload.date);
-      updateRequest.input("teamAId", sql.UniqueIdentifier, payload.teamAId);
-      updateRequest.input("teamBId", sql.UniqueIdentifier, payload.teamBId);
+      updateRequest.input("teamAId", sql.UniqueIdentifier, teamAId);
+      updateRequest.input("teamBId", sql.UniqueIdentifier, teamBId);
       updateRequest.input("scoreA", sql.Int, payload.scoreA);
       updateRequest.input("scoreB", sql.Int, payload.scoreB);
 
       await updateRequest.query(`
         UPDATE matches
         SET league_id = @leagueId,
+            court_id = @courtId,
+            scoring_type = @scoringType,
+            game_type = @gameType,
             match_date = @matchDate,
             team_a_id = @teamAId,
             team_b_id = @teamBId,
@@ -563,7 +589,7 @@ const saveMatch = async (payload, existingMatchId = null) => {
       participantRequest.input("matchId", sql.UniqueIdentifier, matchId);
       participantRequest.input("playerId", sql.UniqueIdentifier, payload.teamAPlayers[i]);
       participantRequest.input("teamSide", sql.Char(1), "A");
-      participantRequest.input("teamId", sql.UniqueIdentifier, payload.teamAId);
+      participantRequest.input("teamId", sql.UniqueIdentifier, teamAId);
       participantRequest.input("participantOrder", sql.TinyInt, i + 1);
       await participantRequest.query(`
         INSERT INTO match_participants (match_id, player_id, team_side, team_id, participant_order)
@@ -576,7 +602,7 @@ const saveMatch = async (payload, existingMatchId = null) => {
       participantRequest.input("matchId", sql.UniqueIdentifier, matchId);
       participantRequest.input("playerId", sql.UniqueIdentifier, payload.teamBPlayers[i]);
       participantRequest.input("teamSide", sql.Char(1), "B");
-      participantRequest.input("teamId", sql.UniqueIdentifier, payload.teamBId);
+      participantRequest.input("teamId", sql.UniqueIdentifier, teamBId);
       participantRequest.input("participantOrder", sql.TinyInt, i + 1);
       await participantRequest.query(`
         INSERT INTO match_participants (match_id, player_id, team_side, team_id, participant_order)
@@ -605,14 +631,18 @@ app.http("adminMatchesCollection", {
           SELECT
             m.id,
             m.league_id AS leagueId,
+            m.court_id AS courtId,
+            m.scoring_type AS scoringType,
+            m.game_type AS gameType,
             CONVERT(varchar(10), m.match_date, 120) AS date,
             m.team_a_id AS teamAId,
             m.team_b_id AS teamBId,
             m.score_a AS scoreA,
             m.score_b AS scoreB,
             l.name + ' (' + CONVERT(varchar(10), l.start_date, 120) + ')' AS leagueName,
-            ta.name AS teamAName,
-            tb.name AS teamBName,
+            c.name AS courtName,
+            COALESCE(ta.name, 'Ladder Side A') AS teamAName,
+            COALESCE(tb.name, 'Ladder Side B') AS teamBName,
             mpa1.player_id AS teamAPlayer1,
             mpa2.player_id AS teamAPlayer2,
             mpb1.player_id AS teamBPlayer1,
@@ -623,8 +653,9 @@ app.http("adminMatchesCollection", {
             pb2.first_name + ' ' + pb2.last_name AS teamBPlayer2Name
           FROM matches m
           JOIN leagues l ON l.id = m.league_id
-          JOIN teams ta ON ta.id = m.team_a_id
-          JOIN teams tb ON tb.id = m.team_b_id
+          LEFT JOIN courts c ON c.id = m.court_id
+          LEFT JOIN teams ta ON ta.id = m.team_a_id
+          LEFT JOIN teams tb ON tb.id = m.team_b_id
           JOIN match_participants mpa1 ON mpa1.match_id = m.id AND mpa1.team_side = 'A' AND mpa1.participant_order = 1
           JOIN match_participants mpa2 ON mpa2.match_id = m.id AND mpa2.team_side = 'A' AND mpa2.participant_order = 2
           JOIN match_participants mpb1 ON mpb1.match_id = m.id AND mpb1.team_side = 'B' AND mpb1.participant_order = 1
@@ -639,12 +670,16 @@ app.http("adminMatchesCollection", {
         const mapped = result.recordset.map((row) => ({
           id: row.id,
           leagueId: row.leagueId,
+          courtId: row.courtId,
+          scoringType: row.scoringType,
+          gameType: row.gameType,
           date: row.date,
-          teamAId: row.teamAId,
-          teamBId: row.teamBId,
+          teamAId: row.teamAId ?? "",
+          teamBId: row.teamBId ?? "",
           scoreA: row.scoreA,
           scoreB: row.scoreB,
           leagueName: row.leagueName,
+          courtName: row.courtName,
           teamAName: row.teamAName,
           teamBName: row.teamBName,
           teamAPlayers: [row.teamAPlayer1, row.teamAPlayer2],
@@ -728,6 +763,7 @@ app.http("duprExport", {
         JOIN players pb1 ON pb1.id = mpb1.player_id
         JOIN players pb2 ON pb2.id = mpb2.player_id
         WHERE m.match_date = @date
+          AND m.game_type = 'Doubles'
         ORDER BY m.match_date, m.created_at;
       `,
         [{ name: "date", type: sql.Date, value: date }]

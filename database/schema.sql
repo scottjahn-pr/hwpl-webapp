@@ -56,14 +56,24 @@ CREATE TABLE dbo.matches (
   id UNIQUEIDENTIFIER NOT NULL PRIMARY KEY DEFAULT NEWID(),
   league_id UNIQUEIDENTIFIER NOT NULL,
   match_date DATE NOT NULL,
-  team_a_id UNIQUEIDENTIFIER NOT NULL,
-  team_b_id UNIQUEIDENTIFIER NOT NULL,
+  court_id UNIQUEIDENTIFIER NULL,
+  scoring_type NVARCHAR(20) NOT NULL DEFAULT 'Standard',
+  game_type NVARCHAR(20) NOT NULL DEFAULT 'Doubles',
+  team_a_id UNIQUEIDENTIFIER NULL,
+  team_b_id UNIQUEIDENTIFIER NULL,
   score_a INT NOT NULL,
   score_b INT NOT NULL,
   created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
   CONSTRAINT CHK_matches_non_tie CHECK (score_a <> score_b),
-  CONSTRAINT CHK_matches_distinct_teams CHECK (team_a_id <> team_b_id),
+  CONSTRAINT CHK_matches_scoring_type CHECK (scoring_type IN ('Standard', 'Rally')),
+  CONSTRAINT CHK_matches_game_type CHECK (game_type IN ('Doubles', 'Ladder')),
+  CONSTRAINT CHK_matches_teams_for_game_type CHECK (
+    (game_type = 'Doubles' AND team_a_id IS NOT NULL AND team_b_id IS NOT NULL AND team_a_id <> team_b_id)
+    OR
+    (game_type = 'Ladder' AND team_a_id IS NULL AND team_b_id IS NULL)
+  ),
   CONSTRAINT FK_matches_league FOREIGN KEY (league_id) REFERENCES dbo.leagues(id),
+  CONSTRAINT FK_matches_court FOREIGN KEY (court_id) REFERENCES dbo.courts(id),
   CONSTRAINT FK_matches_team_a FOREIGN KEY (team_a_id) REFERENCES dbo.teams(id),
   CONSTRAINT FK_matches_team_b FOREIGN KEY (team_b_id) REFERENCES dbo.teams(id)
 );
@@ -73,7 +83,7 @@ CREATE TABLE dbo.match_participants (
   match_id UNIQUEIDENTIFIER NOT NULL,
   player_id UNIQUEIDENTIFIER NOT NULL,
   team_side CHAR(1) NOT NULL,
-  team_id UNIQUEIDENTIFIER NOT NULL,
+  team_id UNIQUEIDENTIFIER NULL,
   participant_order TINYINT NOT NULL,
   created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
   CONSTRAINT CHK_participants_side CHECK (team_side IN ('A', 'B')),
@@ -90,4 +100,5 @@ CREATE UNIQUE INDEX UX_match_participants_unique_player ON dbo.match_participant
 CREATE UNIQUE INDEX UX_match_participants_slot ON dbo.match_participants(match_id, team_side, participant_order);
 
 CREATE INDEX IX_matches_league_date ON dbo.matches(league_id, match_date);
+CREATE INDEX IX_matches_court_date ON dbo.matches(court_id, match_date);
 CREATE INDEX IX_match_participants_player ON dbo.match_participants(player_id);

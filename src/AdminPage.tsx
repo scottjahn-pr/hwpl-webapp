@@ -39,6 +39,10 @@ interface DebugAuthResponse {
 interface ManagedMatch {
   id: string;
   leagueId: string;
+  courtId: string;
+  courtName: string;
+  scoringType: "Standard" | "Rally";
+  gameType: "Doubles" | "Ladder";
   date: string;
   teamAId: string;
   teamBId: string;
@@ -60,6 +64,9 @@ type CourtForm = Omit<Court, "id">;
 
 interface MatchForm {
   leagueId: string;
+  courtId: string;
+  scoringType: "Standard" | "Rally";
+  gameType: "Doubles" | "Ladder";
   date: string;
   teamAId: string;
   teamBId: string;
@@ -133,6 +140,9 @@ function AdminPage() {
 
   const [matchForm, setMatchForm] = useState<MatchForm>({
     leagueId: "",
+    courtId: "",
+    scoringType: "Standard",
+    gameType: "Doubles",
     date: new Date().toISOString().slice(0, 10),
     teamAId: "",
     teamBId: "",
@@ -152,6 +162,7 @@ function AdminPage() {
   useEffect(() => { editingTeamIdRef.current = editingTeamId; }, [editingTeamId]);
 
   const activeLeagues = useMemo(() => leagues.filter((league) => league.isActive), [leagues]);
+  const activeCourts = useMemo(() => courts.filter((court) => court.isActive), [courts]);
   const activeTeams = useMemo(() => teams.filter((team) => team.isActive), [teams]);
   const activePlayers = useMemo(() => players.filter((player) => player.isActive), [players]);
 
@@ -277,6 +288,7 @@ function AdminPage() {
     setMatches(loadedMatches);
 
     const activeLoadedLeagues = loadedLeagues.filter((league) => league.isActive);
+    const activeLoadedCourts = loadedCourts.filter((court) => court.isActive);
     const activeLoadedTeams = loadedTeams.filter((team) => team.isActive);
     const activeLoadedPlayers = loadedPlayers.filter((player) => player.isActive);
 
@@ -289,6 +301,7 @@ function AdminPage() {
     setMatchForm((prev) => ({
       ...prev,
       leagueId: prev.leagueId || activeLoadedLeagues[0]?.id || "",
+      courtId: prev.courtId || activeLoadedCourts[0]?.id || "",
       teamAId: prev.teamAId || activeLoadedTeams[0]?.id || "",
       teamBId: prev.teamBId || activeLoadedTeams[1]?.id || activeLoadedTeams[0]?.id || "",
       teamAPlayer1: prev.teamAPlayer1 || activeLoadedPlayers[0]?.id || "",
@@ -518,6 +531,9 @@ function AdminPage() {
     setEditingMatchId(match.id);
     setMatchForm({
       leagueId: match.leagueId,
+      courtId: match.courtId,
+      scoringType: match.scoringType,
+      gameType: match.gameType,
       date: match.date,
       teamAId: match.teamAId,
       teamBId: match.teamBId,
@@ -554,7 +570,12 @@ function AdminPage() {
     event.preventDefault();
     setMatchError("");
 
-    if (matchForm.teamAId === matchForm.teamBId) {
+    if (!matchForm.courtId) {
+      setMatchError("Please select a court.");
+      return;
+    }
+
+    if (matchForm.gameType === "Doubles" && matchForm.teamAId === matchForm.teamBId) {
       setMatchError("Team A and Team B must be different.");
       return;
     }
@@ -578,9 +599,12 @@ function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leagueId: matchForm.leagueId,
+          courtId: matchForm.courtId,
+          scoringType: matchForm.scoringType,
+          gameType: matchForm.gameType,
           date: matchForm.date,
-          teamAId: matchForm.teamAId,
-          teamBId: matchForm.teamBId,
+          teamAId: matchForm.gameType === "Doubles" ? matchForm.teamAId : null,
+          teamBId: matchForm.gameType === "Doubles" ? matchForm.teamBId : null,
           teamAPlayers: [matchForm.teamAPlayer1, matchForm.teamAPlayer2],
           teamBPlayers: [matchForm.teamBPlayer1, matchForm.teamBPlayer2],
           scoreA,
@@ -695,31 +719,72 @@ function AdminPage() {
               </select>
             </label>
             <label>
-              Date
-              <input type="date" value={matchForm.date} onChange={(e) => setMatchForm((prev) => ({ ...prev, date: e.target.value }))} required />
+              Court
+              <select value={matchForm.courtId} onChange={(e) => setMatchForm((prev) => ({ ...prev, courtId: e.target.value }))} required>
+                {activeCourts.map((court) => (
+                  <option key={court.id} value={court.id}>
+                    {court.name}
+                  </option>
+                ))}
+              </select>
             </label>
             <div className="teams-grid">
               <label>
-                Team A
-                <select value={matchForm.teamAId} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAId: e.target.value }))} required>
-                  {activeTeams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {team.name}
-                    </option>
-                  ))}
+                Scoring Type
+                <select value={matchForm.scoringType} onChange={(e) => setMatchForm((prev) => ({ ...prev, scoringType: e.target.value as "Standard" | "Rally" }))}>
+                  <option value="Standard">Standard</option>
+                  <option value="Rally">Rally</option>
                 </select>
               </label>
               <label>
-                Team B
-                <select value={matchForm.teamBId} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBId: e.target.value }))} required>
-                  {activeTeams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {team.name}
-                    </option>
-                  ))}
+                Game Type
+                <select
+                  value={matchForm.gameType}
+                  onChange={(e) => {
+                    const nextGameType = e.target.value as "Doubles" | "Ladder";
+                    setMatchForm((prev) => ({
+                      ...prev,
+                      gameType: nextGameType,
+                      teamAId: nextGameType === "Ladder" ? "" : (prev.teamAId || activeTeams[0]?.id || ""),
+                      teamBId: nextGameType === "Ladder" ? "" : (prev.teamBId || activeTeams[1]?.id || activeTeams[0]?.id || "")
+                    }));
+                  }}
+                >
+                  <option value="Doubles">Doubles</option>
+                  <option value="Ladder">Ladder</option>
                 </select>
               </label>
             </div>
+            <label>
+              Date
+              <input type="date" value={matchForm.date} onChange={(e) => setMatchForm((prev) => ({ ...prev, date: e.target.value }))} required />
+            </label>
+            {matchForm.gameType === "Doubles" ? (
+              <div className="teams-grid">
+                <label>
+                  Team A
+                  <select value={matchForm.teamAId} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAId: e.target.value }))} required>
+                    {activeTeams.map((team) => (
+                      <option key={team.id} value={team.id}>
+                        {team.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Team B
+                  <select value={matchForm.teamBId} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBId: e.target.value }))} required>
+                    {activeTeams.map((team) => (
+                      <option key={team.id} value={team.id}>
+                        {team.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            ) : (
+              <p className="status-msg">Ladder matches do not use teams. Select four players and the court.</p>
+            )}
             <div className="teams-grid">
               <label>
                 Team A - Player 1
@@ -807,7 +872,7 @@ function AdminPage() {
             {matches.map((match) => (
               <li key={match.id}>
                 <span>
-                  {match.date} - {match.teamAName} ({match.scoreA}) vs {match.teamBName} ({match.scoreB})
+                  {match.date} - {match.teamAName} ({match.scoreA}) vs {match.teamBName} ({match.scoreB}) - {match.gameType}, {match.scoringType}, {match.courtName || "No court"}
                 </span>
                 <div>
                   <button type="button" onClick={() => onEditMatch(match)}>
