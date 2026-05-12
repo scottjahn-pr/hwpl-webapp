@@ -1050,7 +1050,7 @@ function AdminPage() {
                 <input type="number" min={0} step={1} value={matchForm.scoreB} onChange={(e) => setMatchForm((prev) => ({ ...prev, scoreB: e.target.value }))} required />
               </label>
             </div>
-            {matchError ? <p className="form-error"></p> : null}
+            {matchError ? <p className="form-error" style={{fontSize: "1rem", padding: "0.75rem", marginBottom: "0.5rem"}}>{matchError}</p> : null}
             <button type="submit">{editingMatchId ? "Update Match" : "Save Match"}</button>
             {editingMatchId ? (
               <button type="button" onClick={onCancelMatchEdit}>
