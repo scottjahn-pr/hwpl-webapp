@@ -199,6 +199,11 @@ select {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.match-team-column {
+  display: grid;
+  gap: 0.7rem;
+}
+
 .score-row {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

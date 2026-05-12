@@ -182,6 +182,19 @@ function AdminPage() {
     return activePlayers.filter((player) => !taken.has(player.id) || player.id === selected[slot]);
   };
 
+  const getPreferredPlayerPairForTeam = (teamId: string, excludedIds: string[]): [string, string] => {
+    const excluded = new Set(excludedIds.filter(Boolean));
+    const teamDefaults = activePlayers
+      .filter((player) => player.defaultTeamId === teamId)
+      .map((player) => player.id)
+      .filter((id) => !excluded.has(id));
+    const fallback = activePlayers
+      .map((player) => player.id)
+      .filter((id) => !excluded.has(id) && !teamDefaults.includes(id));
+    const candidates = [...teamDefaults, ...fallback];
+    return [candidates[0] ?? "", candidates[1] ?? ""];
+  };
+
   const formatLeagueDates = (league: Pick<League, "startDate" | "endDate">) => `${league.startDate} to ${league.endDate}`;
 
   const leagueNameById = useMemo(
@@ -761,7 +774,16 @@ function AdminPage() {
                       ...prev,
                       gameType: nextGameType,
                       teamAId: nextGameType === "Ladder" ? "" : (prev.teamAId || activeTeams[0]?.id || ""),
-                      teamBId: nextGameType === "Ladder" ? "" : (prev.teamBId || activeTeams[1]?.id || activeTeams[0]?.id || "")
+                      teamBId: nextGameType === "Ladder" ? "" : (prev.teamBId || activeTeams[1]?.id || activeTeams[0]?.id || ""),
+                      ...(nextGameType === "Ladder"
+                        ? {}
+                        : (() => {
+                            const teamAId = prev.teamAId || activeTeams[0]?.id || "";
+                            const teamBId = prev.teamBId || activeTeams[1]?.id || activeTeams[0]?.id || "";
+                            const [teamAPlayer1, teamAPlayer2] = getPreferredPlayerPairForTeam(teamAId, []);
+                            const [teamBPlayer1, teamBPlayer2] = getPreferredPlayerPairForTeam(teamBId, [teamAPlayer1, teamAPlayer2]);
+                            return { teamAPlayer1, teamAPlayer2, teamBPlayer1, teamBPlayer2 };
+                          })())
                     }));
                   }}
                 >
@@ -776,72 +798,142 @@ function AdminPage() {
             </label>
             {matchForm.gameType === "Doubles" ? (
               <div className="teams-grid">
-                <label>
-                  Team A
-                  <select value={matchForm.teamAId} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAId: e.target.value }))} required>
-                    {activeTeams.map((team) => (
-                      <option key={team.id} value={team.id}>
-                        {team.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Team B
-                  <select value={matchForm.teamBId} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBId: e.target.value }))} required>
-                    {activeTeams.map((team) => (
-                      <option key={team.id} value={team.id}>
-                        {team.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="match-team-column">
+                  <label>
+                    Team A
+                    <select
+                      value={matchForm.teamAId}
+                      onChange={(e) => {
+                        const nextTeamAId = e.target.value;
+                        setMatchForm((prev) => {
+                          const [teamAPlayer1, teamAPlayer2] = getPreferredPlayerPairForTeam(nextTeamAId, [prev.teamBPlayer1, prev.teamBPlayer2]);
+                          return { ...prev, teamAId: nextTeamAId, teamAPlayer1, teamAPlayer2 };
+                        });
+                      }}
+                      required
+                    >
+                      {activeTeams.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Team A - Player 1
+                    <select value={matchForm.teamAPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer1: e.target.value }))}>
+                      {getAvailablePlayersForSlot("teamAPlayer1").map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.firstName} {player.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Team A - Player 2
+                    <select value={matchForm.teamAPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer2: e.target.value }))}>
+                      {getAvailablePlayersForSlot("teamAPlayer2").map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.firstName} {player.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="match-team-column">
+                  <label>
+                    Team B
+                    <select
+                      value={matchForm.teamBId}
+                      onChange={(e) => {
+                        const nextTeamBId = e.target.value;
+                        setMatchForm((prev) => {
+                          const [teamBPlayer1, teamBPlayer2] = getPreferredPlayerPairForTeam(nextTeamBId, [prev.teamAPlayer1, prev.teamAPlayer2]);
+                          return { ...prev, teamBId: nextTeamBId, teamBPlayer1, teamBPlayer2 };
+                        });
+                      }}
+                      required
+                    >
+                      {activeTeams.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Team B - Player 1
+                    <select value={matchForm.teamBPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer1: e.target.value }))}>
+                      {getAvailablePlayersForSlot("teamBPlayer1").map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.firstName} {player.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Team B - Player 2
+                    <select value={matchForm.teamBPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer2: e.target.value }))}>
+                      {getAvailablePlayersForSlot("teamBPlayer2").map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.firstName} {player.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </div>
             ) : (
-              <p className="status-msg">Ladder matches do not use teams. Select four players and the court.</p>
+              <>
+                <p className="status-msg">Ladder matches do not use teams. Select four players and the court.</p>
+                <div className="teams-grid">
+                  <div className="match-team-column">
+                    <label>
+                      Side A - Player 1
+                      <select value={matchForm.teamAPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer1: e.target.value }))}>
+                        {getAvailablePlayersForSlot("teamAPlayer1").map((player) => (
+                          <option key={player.id} value={player.id}>
+                            {player.firstName} {player.lastName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Side A - Player 2
+                      <select value={matchForm.teamAPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer2: e.target.value }))}>
+                        {getAvailablePlayersForSlot("teamAPlayer2").map((player) => (
+                          <option key={player.id} value={player.id}>
+                            {player.firstName} {player.lastName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="match-team-column">
+                    <label>
+                      Side B - Player 1
+                      <select value={matchForm.teamBPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer1: e.target.value }))}>
+                        {getAvailablePlayersForSlot("teamBPlayer1").map((player) => (
+                          <option key={player.id} value={player.id}>
+                            {player.firstName} {player.lastName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Side B - Player 2
+                      <select value={matchForm.teamBPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer2: e.target.value }))}>
+                        {getAvailablePlayersForSlot("teamBPlayer2").map((player) => (
+                          <option key={player.id} value={player.id}>
+                            {player.firstName} {player.lastName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </>
             )}
-            <div className="teams-grid">
-              <label>
-                Team A - Player 1
-                <select value={matchForm.teamAPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer1: e.target.value }))}>
-                  {getAvailablePlayersForSlot("teamAPlayer1").map((player) => (
-                    <option key={player.id} value={player.id}>
-                      {player.firstName} {player.lastName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Team A - Player 2
-                <select value={matchForm.teamAPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer2: e.target.value }))}>
-                  {getAvailablePlayersForSlot("teamAPlayer2").map((player) => (
-                    <option key={player.id} value={player.id}>
-                      {player.firstName} {player.lastName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Team B - Player 1
-                <select value={matchForm.teamBPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer1: e.target.value }))}>
-                  {getAvailablePlayersForSlot("teamBPlayer1").map((player) => (
-                    <option key={player.id} value={player.id}>
-                      {player.firstName} {player.lastName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Team B - Player 2
-                <select value={matchForm.teamBPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer2: e.target.value }))}>
-                  {getAvailablePlayersForSlot("teamBPlayer2").map((player) => (
-                    <option key={player.id} value={player.id}>
-                      {player.firstName} {player.lastName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
             <div className="score-row">
               <label>
                 Team A Score
