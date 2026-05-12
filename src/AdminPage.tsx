@@ -926,6 +926,9 @@ function AdminPage() {
                       onChange={(e) => {
                         const nextTeamAId = e.target.value;
                         setMatchForm((prev) => {
+                          if (editingMatchId) {
+                            return { ...prev, teamAId: nextTeamAId };
+                          }
                           const [teamAPlayer1, teamAPlayer2] = getPreferredPlayerPairForTeam(nextTeamAId, [prev.teamBPlayer1, prev.teamBPlayer2]);
                           return { ...prev, teamAId: nextTeamAId, teamAPlayer1, teamAPlayer2 };
                         });
@@ -971,6 +974,9 @@ function AdminPage() {
                       onChange={(e) => {
                         const nextTeamBId = e.target.value;
                         setMatchForm((prev) => {
+                          if (editingMatchId) {
+                            return { ...prev, teamBId: nextTeamBId };
+                          }
                           const [teamBPlayer1, teamBPlayer2] = getPreferredPlayerPairForTeam(nextTeamBId, [prev.teamAPlayer1, prev.teamAPlayer2]);
                           return { ...prev, teamBId: nextTeamBId, teamBPlayer1, teamBPlayer2 };
                         });
