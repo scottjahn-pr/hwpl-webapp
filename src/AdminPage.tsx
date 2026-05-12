@@ -162,6 +162,7 @@ function AdminPage() {
 
   const [matchError, setMatchError] = useState("");
   const [matchSuccess, setMatchSuccess] = useState("");
+  const [isSavingMatch, setIsSavingMatch] = useState(false);
   const [adminMessage, setAdminMessage] = useState("");
   const [csvDate, setCsvDate] = useState(new Date().toISOString().slice(0, 10));
   const [adminApiBase, setAdminApiBase] = useState("/api/ops");
@@ -638,8 +639,12 @@ function AdminPage() {
     }
   };
 
-  const onRecordMatch = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const submitMatch = async () => {
+    if (isSavingMatch) {
+      return;
+    }
+
+    setIsSavingMatch(true);
     setMatchError("");
     setMatchSuccess("");
     setAdminMessage("");
@@ -647,6 +652,7 @@ function AdminPage() {
     const failMatchValidation = (message: string) => {
       setMatchError(message);
       setAdminMessage(message);
+      setIsSavingMatch(false);
       setTimeout(() => {
         matchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 50);
@@ -752,11 +758,18 @@ function AdminPage() {
       setMatchError(networkMessage);
       setAdminMessage(networkMessage);
       setTimeout(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, 50);
+      setIsSavingMatch(false);
       return;
     }
     await loadAdminData().catch(() => {
       setAdminMessage((prev) => prev ? `${prev} (saved, but list refresh failed)` : "Saved, but list refresh failed.");
     });
+    setIsSavingMatch(false);
+  };
+
+  const onRecordMatch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void submitMatch();
   };
 
   const exportMatchesForDay = async () => {
@@ -1062,7 +1075,9 @@ function AdminPage() {
               </label>
             </div>
             {matchError ? <p className="form-error" style={{fontSize: "1rem", padding: "0.75rem", marginBottom: "0.5rem"}}>{matchError}</p> : null}
-            <button type="submit">{editingMatchId ? "Update Match" : "Save Match"}</button>
+            <button type="submit" disabled={isSavingMatch}>
+              {isSavingMatch ? (editingMatchId ? "Updating..." : "Saving...") : (editingMatchId ? "Update Match" : "Save Match")}
+            </button>
             {editingMatchId ? (
               <button type="button" onClick={onCancelMatchEdit}>
                 Cancel Edit
