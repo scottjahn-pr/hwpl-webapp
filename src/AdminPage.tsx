@@ -203,6 +203,17 @@ function AdminPage() {
     return list;
   }, [activeTeams, teams, matchForm.teamAId, matchForm.teamBId]);
 
+  const matchFormPlayers = useMemo(() => {
+    const list = [...activePlayers];
+    for (const id of [matchForm.teamAPlayer1, matchForm.teamAPlayer2, matchForm.teamBPlayer1, matchForm.teamBPlayer2]) {
+      if (id && !list.some((p) => p.id === id)) {
+        const found = players.find((p) => p.id === id);
+        if (found) list.push(found);
+      }
+    }
+    return list;
+  }, [activePlayers, players, matchForm.teamAPlayer1, matchForm.teamAPlayer2, matchForm.teamBPlayer1, matchForm.teamBPlayer2]);
+
   const getAvailablePlayersForSlot = (slot: "teamAPlayer1" | "teamAPlayer2" | "teamBPlayer1" | "teamBPlayer2") => {
     const selected = {
       teamAPlayer1: matchForm.teamAPlayer1,
@@ -217,7 +228,7 @@ function AdminPage() {
         .map(([, value]) => value)
     );
 
-    return activePlayers.filter((player) => !taken.has(player.id) || player.id === selected[slot]);
+    return matchFormPlayers.filter((player) => !taken.has(player.id) || player.id === selected[slot]);
   };
 
   const getPreferredPlayerPairForTeam = (teamId: string, excludedIds: string[]): [string, string] => {
@@ -637,7 +648,7 @@ function AdminPage() {
       setMatchError(message);
       setAdminMessage(message);
       setTimeout(() => {
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        matchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 50);
     };
 
