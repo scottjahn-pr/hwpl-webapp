@@ -319,7 +319,6 @@ function AdminPage() {
     const activeLoadedLeagues = loadedLeagues.filter((league) => league.isActive);
     const activeLoadedCourts = loadedCourts.filter((court) => court.isActive);
     const activeLoadedTeams = loadedTeams.filter((team) => team.isActive);
-    const activeLoadedPlayers = loadedPlayers.filter((player) => player.isActive);
 
     if (!editingTeamIdRef.current) {
       const activeLoadedLeagueIds = activeLoadedLeagues.map((l) => l.id);
@@ -330,13 +329,7 @@ function AdminPage() {
     setMatchForm((prev) => ({
       ...prev,
       leagueId: prev.leagueId || activeLoadedLeagues[0]?.id || "",
-      courtId: prev.courtId || activeLoadedCourts[0]?.id || "",
-      teamAId: prev.teamAId || activeLoadedTeams[0]?.id || "",
-      teamBId: prev.teamBId || activeLoadedTeams[1]?.id || activeLoadedTeams[0]?.id || "",
-      teamAPlayer1: prev.teamAPlayer1 || activeLoadedPlayers[0]?.id || "",
-      teamAPlayer2: prev.teamAPlayer2 || activeLoadedPlayers[1]?.id || "",
-      teamBPlayer1: prev.teamBPlayer1 || activeLoadedPlayers[2]?.id || "",
-      teamBPlayer2: prev.teamBPlayer2 || activeLoadedPlayers[3]?.id || ""
+      courtId: prev.courtId || activeLoadedCourts[0]?.id || ""
     }));
   }, [adminApiBase]);
 
@@ -603,6 +596,17 @@ function AdminPage() {
       return;
     }
 
+    if (matchForm.gameType === "Doubles" && (!matchForm.teamAId || !matchForm.teamBId)) {
+      setMatchError("Please select both teams.");
+      return;
+    }
+
+    const pickedPlayersEarly = [matchForm.teamAPlayer1, matchForm.teamAPlayer2, matchForm.teamBPlayer1, matchForm.teamBPlayer2];
+    if (pickedPlayersEarly.some((id) => !id)) {
+      setMatchError("Please select all four players.");
+      return;
+    }
+
     if (matchForm.gameType === "Doubles" && matchForm.teamAId === matchForm.teamBId) {
       setMatchError("Team A and Team B must be different.");
       return;
@@ -773,15 +777,13 @@ function AdminPage() {
                     setMatchForm((prev) => ({
                       ...prev,
                       gameType: nextGameType,
-                      teamAId: nextGameType === "Ladder" ? "" : (prev.teamAId || activeTeams[0]?.id || ""),
-                      teamBId: nextGameType === "Ladder" ? "" : (prev.teamBId || activeTeams[1]?.id || activeTeams[0]?.id || ""),
+                      teamAId: nextGameType === "Ladder" ? "" : prev.teamAId,
+                      teamBId: nextGameType === "Ladder" ? "" : prev.teamBId,
                       ...(nextGameType === "Ladder"
                         ? {}
                         : (() => {
-                            const teamAId = prev.teamAId || activeTeams[0]?.id || "";
-                            const teamBId = prev.teamBId || activeTeams[1]?.id || activeTeams[0]?.id || "";
-                            const [teamAPlayer1, teamAPlayer2] = getPreferredPlayerPairForTeam(teamAId, []);
-                            const [teamBPlayer1, teamBPlayer2] = getPreferredPlayerPairForTeam(teamBId, [teamAPlayer1, teamAPlayer2]);
+                            const [teamAPlayer1, teamAPlayer2] = getPreferredPlayerPairForTeam(prev.teamAId, []);
+                            const [teamBPlayer1, teamBPlayer2] = getPreferredPlayerPairForTeam(prev.teamBId, [teamAPlayer1, teamAPlayer2]);
                             return { teamAPlayer1, teamAPlayer2, teamBPlayer1, teamBPlayer2 };
                           })())
                     }));
@@ -812,6 +814,7 @@ function AdminPage() {
                       }}
                       required
                     >
+                      <option value="">Select a team…</option>
                       {activeTeams.map((team) => (
                         <option key={team.id} value={team.id}>
                           {team.name}
@@ -822,6 +825,7 @@ function AdminPage() {
                   <label>
                     Team A - Player 1
                     <select value={matchForm.teamAPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer1: e.target.value }))}>
+                      <option value="">Select a player…</option>
                       {getAvailablePlayersForSlot("teamAPlayer1").map((player) => (
                         <option key={player.id} value={player.id}>
                           {player.firstName} {player.lastName}
@@ -832,6 +836,7 @@ function AdminPage() {
                   <label>
                     Team A - Player 2
                     <select value={matchForm.teamAPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer2: e.target.value }))}>
+                      <option value="">Select a player…</option>
                       {getAvailablePlayersForSlot("teamAPlayer2").map((player) => (
                         <option key={player.id} value={player.id}>
                           {player.firstName} {player.lastName}
@@ -854,6 +859,7 @@ function AdminPage() {
                       }}
                       required
                     >
+                      <option value="">Select a team…</option>
                       {activeTeams.map((team) => (
                         <option key={team.id} value={team.id}>
                           {team.name}
@@ -864,6 +870,7 @@ function AdminPage() {
                   <label>
                     Team B - Player 1
                     <select value={matchForm.teamBPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer1: e.target.value }))}>
+                      <option value="">Select a player…</option>
                       {getAvailablePlayersForSlot("teamBPlayer1").map((player) => (
                         <option key={player.id} value={player.id}>
                           {player.firstName} {player.lastName}
@@ -874,6 +881,7 @@ function AdminPage() {
                   <label>
                     Team B - Player 2
                     <select value={matchForm.teamBPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer2: e.target.value }))}>
+                      <option value="">Select a player…</option>
                       {getAvailablePlayersForSlot("teamBPlayer2").map((player) => (
                         <option key={player.id} value={player.id}>
                           {player.firstName} {player.lastName}
@@ -891,6 +899,7 @@ function AdminPage() {
                     <label>
                       Side A - Player 1
                       <select value={matchForm.teamAPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer1: e.target.value }))}>
+                        <option value="">Select a player…</option>
                         {getAvailablePlayersForSlot("teamAPlayer1").map((player) => (
                           <option key={player.id} value={player.id}>
                             {player.firstName} {player.lastName}
@@ -901,6 +910,7 @@ function AdminPage() {
                     <label>
                       Side A - Player 2
                       <select value={matchForm.teamAPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamAPlayer2: e.target.value }))}>
+                        <option value="">Select a player…</option>
                         {getAvailablePlayersForSlot("teamAPlayer2").map((player) => (
                           <option key={player.id} value={player.id}>
                             {player.firstName} {player.lastName}
@@ -913,6 +923,7 @@ function AdminPage() {
                     <label>
                       Side B - Player 1
                       <select value={matchForm.teamBPlayer1} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer1: e.target.value }))}>
+                        <option value="">Select a player…</option>
                         {getAvailablePlayersForSlot("teamBPlayer1").map((player) => (
                           <option key={player.id} value={player.id}>
                             {player.firstName} {player.lastName}
@@ -923,6 +934,7 @@ function AdminPage() {
                     <label>
                       Side B - Player 2
                       <select value={matchForm.teamBPlayer2} onChange={(e) => setMatchForm((prev) => ({ ...prev, teamBPlayer2: e.target.value }))}>
+                        <option value="">Select a player…</option>
                         {getAvailablePlayersForSlot("teamBPlayer2").map((player) => (
                           <option key={player.id} value={player.id}>
                             {player.firstName} {player.lastName}
