@@ -161,6 +161,7 @@ function AdminPage() {
   });
 
   const [matchError, setMatchError] = useState("");
+  const [matchSuccess, setMatchSuccess] = useState("");
   const [adminMessage, setAdminMessage] = useState("");
   const [csvDate, setCsvDate] = useState(new Date().toISOString().slice(0, 10));
   const [adminApiBase, setAdminApiBase] = useState("/api/ops");
@@ -628,6 +629,7 @@ function AdminPage() {
   const onRecordMatch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setMatchError("");
+    setMatchSuccess("");
 
     if (!matchForm.courtId) {
       setMatchError("Please select a court.");
@@ -664,8 +666,8 @@ function AdminPage() {
     }
 
     try {
+      const wasEditing = Boolean(editingMatchId);
       const res = await authFetch(editingMatchId ? `${adminApiBase}/matches/${editingMatchId}` : `${adminApiBase}/matches`, {
-        method: editingMatchId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leagueId: matchForm.leagueId,
@@ -697,14 +699,32 @@ function AdminPage() {
         const normalizedRaw = raw.trim();
         const fallbackText = normalizedRaw && !normalizedRaw.startsWith("<") ? normalizedRaw : "";
         setMatchError(parsed?.error ?? parsed?.message ?? fallbackText ?? "Failed to record match.");
+        matchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         return;
       }
 
       setEditingMatchId(null);
-      setAdminMessage(editingMatchId ? "Match updated." : "Match result recorded.");
+      setMatchSuccess(wasEditing ? "Match updated successfully." : "Match result recorded.");
+      setMatchForm({
+        leagueId: matchForm.leagueId,
+        courtId: matchForm.courtId,
+        scoringType: "Standard",
+        gameType: "Doubles",
+        date: new Date().toISOString().slice(0, 10),
+        teamAId: "",
+        teamBId: "",
+        teamAPlayer1: "",
+        teamAPlayer2: "",
+        teamBPlayer1: "",
+        teamBPlayer2: "",
+        scoreA: "11",
+        scoreB: "8"
+      });
+      matchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       await loadAdminData();
     } catch {
       setMatchError("Network error recording match.");
+      matchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
@@ -790,6 +810,8 @@ function AdminPage() {
             <p>{editingMatchId ? "Update the fields below and press Update Match to save." : "Admins can add individual match outcomes."}</p>
           </div>
           <form className="match-form" onSubmit={onRecordMatch} noValidate>
+            {matchError ? <p className="form-error">{matchError}</p> : null}
+            {matchSuccess ? <p className="status-msg">{matchSuccess}</p> : null}
             <label>
               League
               <select value={matchForm.leagueId} onChange={(e) => setMatchForm((prev) => ({ ...prev, leagueId: e.target.value }))}>
@@ -1006,7 +1028,7 @@ function AdminPage() {
                 <input type="number" min={0} step={1} value={matchForm.scoreB} onChange={(e) => setMatchForm((prev) => ({ ...prev, scoreB: e.target.value }))} required />
               </label>
             </div>
-            {matchError ? <p className="form-error">{matchError}</p> : null}
+            {matchError ? <p className="form-error"></p> : null}
             <button type="submit">{editingMatchId ? "Update Match" : "Save Match"}</button>
             {editingMatchId ? (
               <button type="button" onClick={onCancelMatchEdit}>
