@@ -631,9 +631,11 @@ function AdminPage() {
     event.preventDefault();
     setMatchError("");
     setMatchSuccess("");
+    setAdminMessage("");
 
     const failMatchValidation = (message: string) => {
       setMatchError(message);
+      setAdminMessage(message);
       setTimeout(() => {
         window.scrollTo({ top: 0, behavior: "smooth" });
       }, 50);
@@ -712,7 +714,9 @@ function AdminPage() {
       }
 
       setEditingMatchId(null);
-      setMatchSuccess(wasEditing ? "✓ Match updated successfully." : "✓ Match result recorded.");
+      const successMessage = wasEditing ? "✓ Match updated successfully." : "✓ Match result recorded.";
+      setMatchSuccess(successMessage);
+      setAdminMessage(successMessage);
       setMatchForm({
         leagueId: matchForm.leagueId,
         courtId: matchForm.courtId,
@@ -733,11 +737,15 @@ function AdminPage() {
       }, 50);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      setMatchError(`Network error: ${msg}`);
+      const networkMessage = `Network error: ${msg}`;
+      setMatchError(networkMessage);
+      setAdminMessage(networkMessage);
       setTimeout(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, 50);
       return;
     }
-    await loadAdminData().catch(() => {});
+    await loadAdminData().catch(() => {
+      setAdminMessage((prev) => prev ? `${prev} (saved, but list refresh failed)` : "Saved, but list refresh failed.");
+    });
   };
 
   const exportMatchesForDay = async () => {
@@ -814,6 +822,8 @@ function AdminPage() {
           <a className="admin-link" href="/.auth/logout?post_logout_redirect_uri=/">Sign out</a>
         </div>
       </section>
+
+      {adminMessage ? <p className="panel status-msg">{adminMessage}</p> : null}
 
       <section className="admin-grid">
         <article className="panel module-record-match" ref={matchFormRef}>
@@ -1322,7 +1332,6 @@ function AdminPage() {
 
       </section>
 
-      {adminMessage ? <p className="panel status-msg">{adminMessage}</p> : null}
     </main>
   );
 }
