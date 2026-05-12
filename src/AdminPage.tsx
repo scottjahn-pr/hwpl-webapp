@@ -649,13 +649,20 @@ function AdminPage() {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => null) as { message?: string; error?: string } | null;
-        if (err?.error || err?.message) {
-          setMatchError(err.error ?? err.message ?? "Failed to record match.");
-        } else {
-          const fallbackText = await res.text().catch(() => "");
-          setMatchError(fallbackText || "Failed to record match.");
+        const raw = await res.text().catch(() => "");
+        let parsed: { message?: string; error?: string } | null = null;
+
+        if (raw) {
+          try {
+            parsed = JSON.parse(raw) as { message?: string; error?: string };
+          } catch {
+            parsed = null;
+          }
         }
+
+        const normalizedRaw = raw.trim();
+        const fallbackText = normalizedRaw && !normalizedRaw.startsWith("<") ? normalizedRaw : "";
+        setMatchError(parsed?.error ?? parsed?.message ?? fallbackText ?? "Failed to record match.");
         return;
       }
 
