@@ -23,6 +23,6 @@ export const parseJson = async (request) => {
   }
 };
 
-export const badRequest = (message) => json({ error: message }, 400);
-export const unauthorized = () => json({ error: "Admin role required." }, 403);
-export const serverError = (message) => json({ error: message }, 500);
+export const badRequest = (message) => json({ error: message, message }, 400);
+export const unauthorized = () => json({ error: "Admin role required.", message: "Admin role required." }, 403);
+export const serverError = (message) => json({ error: message, message }, 500);

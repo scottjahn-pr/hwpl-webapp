@@ -649,8 +649,13 @@ function AdminPage() {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({})) as { message?: string };
-        setMatchError(err.message ?? "Failed to record match.");
+        const err = await res.json().catch(() => null) as { message?: string; error?: string } | null;
+        if (err?.error || err?.message) {
+          setMatchError(err.error ?? err.message ?? "Failed to record match.");
+        } else {
+          const fallbackText = await res.text().catch(() => "");
+          setMatchError(fallbackText || "Failed to record match.");
+        }
         return;
       }
 
