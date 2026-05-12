@@ -172,6 +172,36 @@ function AdminPage() {
   const activeTeams = useMemo(() => teams.filter((team) => team.isActive), [teams]);
   const activePlayers = useMemo(() => players.filter((player) => player.isActive), [players]);
 
+  // Match form lists: active items plus any currently-referenced inactive item so the select always renders its value.
+  const matchFormLeagues = useMemo(() => {
+    const list = [...activeLeagues];
+    if (matchForm.leagueId && !list.some((l) => l.id === matchForm.leagueId)) {
+      const found = leagues.find((l) => l.id === matchForm.leagueId);
+      if (found) list.unshift(found);
+    }
+    return list;
+  }, [activeLeagues, leagues, matchForm.leagueId]);
+
+  const matchFormCourts = useMemo(() => {
+    const list = [...activeCourts];
+    if (matchForm.courtId && !list.some((c) => c.id === matchForm.courtId)) {
+      const found = courts.find((c) => c.id === matchForm.courtId);
+      if (found) list.unshift(found);
+    }
+    return list;
+  }, [activeCourts, courts, matchForm.courtId]);
+
+  const matchFormTeams = useMemo(() => {
+    const list = [...activeTeams];
+    for (const id of [matchForm.teamAId, matchForm.teamBId]) {
+      if (id && !list.some((t) => t.id === id)) {
+        const found = teams.find((t) => t.id === id);
+        if (found) list.push(found);
+      }
+    }
+    return list;
+  }, [activeTeams, teams, matchForm.teamAId, matchForm.teamBId]);
+
   const getAvailablePlayersForSlot = (slot: "teamAPlayer1" | "teamAPlayer2" | "teamBPlayer1" | "teamBPlayer2") => {
     const selected = {
       teamAPlayer1: matchForm.teamAPlayer1,
@@ -759,11 +789,11 @@ function AdminPage() {
             <h3>{editingMatchId ? "Edit Match Result" : "Record Match Result"}</h3>
             <p>{editingMatchId ? "Update the fields below and press Update Match to save." : "Admins can add individual match outcomes."}</p>
           </div>
-          <form className="match-form" onSubmit={onRecordMatch}>
+          <form className="match-form" onSubmit={onRecordMatch} noValidate>
             <label>
               League
-              <select value={matchForm.leagueId} onChange={(e) => setMatchForm((prev) => ({ ...prev, leagueId: e.target.value }))} required>
-                {activeLeagues.map((league) => (
+              <select value={matchForm.leagueId} onChange={(e) => setMatchForm((prev) => ({ ...prev, leagueId: e.target.value }))}>
+                {matchFormLeagues.map((league) => (
                   <option key={league.id} value={league.id}>
                     {league.name}
                   </option>
@@ -772,8 +802,8 @@ function AdminPage() {
             </label>
             <label>
               Court
-              <select value={matchForm.courtId} onChange={(e) => setMatchForm((prev) => ({ ...prev, courtId: e.target.value }))} required>
-                {activeCourts.map((court) => (
+              <select value={matchForm.courtId} onChange={(e) => setMatchForm((prev) => ({ ...prev, courtId: e.target.value }))}>
+                {matchFormCourts.map((court) => (
                   <option key={court.id} value={court.id}>
                     {court.name}
                   </option>
@@ -835,7 +865,7 @@ function AdminPage() {
                       required
                     >
                       <option value="">Select a team…</option>
-                      {activeTeams.map((team) => (
+                      {matchFormTeams.map((team) => (
                         <option key={team.id} value={team.id}>
                           {team.name}
                         </option>
@@ -880,7 +910,7 @@ function AdminPage() {
                       required
                     >
                       <option value="">Select a team…</option>
-                      {activeTeams.map((team) => (
+                      {matchFormTeams.map((team) => (
                         <option key={team.id} value={team.id}>
                           {team.name}
                         </option>
