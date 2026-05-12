@@ -705,7 +705,7 @@ function AdminPage() {
       }
 
       setEditingMatchId(null);
-      setMatchSuccess(wasEditing ? "Match updated successfully." : "Match result recorded.");
+      setMatchSuccess(wasEditing ? "✓ Match updated successfully." : "✓ Match result recorded.");
       setMatchForm({
         leagueId: matchForm.leagueId,
         courtId: matchForm.courtId,
@@ -721,12 +721,16 @@ function AdminPage() {
         scoreA: "11",
         scoreB: "8"
       });
-      matchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      await loadAdminData();
-    } catch {
-      setMatchError("Network error recording match.");
-      matchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }, 50);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setMatchError(`Network error: ${msg}`);
+      setTimeout(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, 50);
+      return;
     }
+    await loadAdminData().catch(() => {});
   };
 
   const exportMatchesForDay = async () => {
@@ -811,8 +815,8 @@ function AdminPage() {
             <p>{editingMatchId ? "Update the fields below and press Update Match to save." : "Admins can add individual match outcomes."}</p>
           </div>
           <form className="match-form" onSubmit={onRecordMatch} noValidate>
-            {matchError ? <p className="form-error">{matchError}</p> : null}
-            {matchSuccess ? <p className="status-msg">{matchSuccess}</p> : null}
+            {matchError ? <p className="form-error" style={{fontSize: "1rem", padding: "0.75rem", marginBottom: "0.5rem"}}>{matchError}</p> : null}
+            {matchSuccess ? <p className="status-msg" style={{fontSize: "1rem", padding: "0.75rem", marginBottom: "0.5rem", background: "#d4edda", border: "1px solid #28a745", borderRadius: "4px"}}>{matchSuccess}</p> : null}
             <label>
               League
               <select value={matchForm.leagueId} onChange={(e) => setMatchForm((prev) => ({ ...prev, leagueId: e.target.value }))}>
