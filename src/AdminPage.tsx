@@ -84,6 +84,34 @@ interface MatchForm {
   scoreB: string;
 }
 
+interface MatchSubmitDebug {
+  timestamp: string;
+  phase: "requesting" | "response" | "network-error" | "refresh-success" | "refresh-failed";
+  mode: "create" | "update";
+  endpoint: string;
+  editingMatchId: string | null;
+  payload: {
+    leagueId: string;
+    courtId: string;
+    scoringType: "Standard" | "Rally";
+    gameType: "Doubles" | "Ladder";
+    date: string;
+    teamAId: string | null;
+    teamBId: string | null;
+    teamAPlayers: string[];
+    teamBPlayers: string[];
+    scoreA: number;
+    scoreB: number;
+  };
+  response?: {
+    status: number;
+    ok: boolean;
+    rawBody: string;
+    parsedBody: unknown;
+  };
+  error?: string;
+}
+
 const emptyPlayerForm: PlayerForm = {
   firstName: "",
   lastName: "",
@@ -163,6 +191,7 @@ function AdminPage() {
   const [matchError, setMatchError] = useState("");
   const [matchSuccess, setMatchSuccess] = useState("");
   const [isSavingMatch, setIsSavingMatch] = useState(false);
+  const [lastMatchSubmitDebug, setLastMatchSubmitDebug] = useState<MatchSubmitDebug | null>(null);
   const [adminMessage, setAdminMessage] = useState("");
   const [csvDate, setCsvDate] = useState(new Date().toISOString().slice(0, 10));
   const [adminApiBase, setAdminApiBase] = useState("/api/ops");
@@ -694,39 +723,69 @@ function AdminPage() {
 
     try {
       const wasEditing = Boolean(editingMatchId);
-      const res = await authFetch(editingMatchId ? `${adminApiBase}/matches/${editingMatchId}` : `${adminApiBase}/matches`, {
+      const endpoint = editingMatchId ? `${adminApiBase}/matches/${editingMatchId}` : `${adminApiBase}/matches`;
+      const payload = {
+        leagueId: matchForm.leagueId,
+        courtId: matchForm.courtId,
+        scoringType: matchForm.scoringType,
+        gameType: matchForm.gameType,
+        date: matchForm.date,
+        teamAId: matchForm.gameType === "Doubles" ? matchForm.teamAId : null,
+        teamBId: matchForm.gameType === "Doubles" ? matchForm.teamBId : null,
+        teamAPlayers: [matchForm.teamAPlayer1, matchForm.teamAPlayer2],
+        teamBPlayers: [matchForm.teamBPlayer1, matchForm.teamBPlayer2],
+        scoreA,
+        scoreB
+      };
+
+      setLastMatchSubmitDebug({
+        timestamp: new Date().toISOString(),
+        phase: "requesting",
+        mode: wasEditing ? "update" : "create",
+        endpoint,
+        editingMatchId,
+        payload
+      });
+
+      const res = await authFetch(endpoint, {
         method: editingMatchId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leagueId: matchForm.leagueId,
-          courtId: matchForm.courtId,
-          scoringType: matchForm.scoringType,
-          gameType: matchForm.gameType,
-          date: matchForm.date,
-          teamAId: matchForm.gameType === "Doubles" ? matchForm.teamAId : null,
-          teamBId: matchForm.gameType === "Doubles" ? matchForm.teamBId : null,
-          teamAPlayers: [matchForm.teamAPlayer1, matchForm.teamAPlayer2],
-          teamBPlayers: [matchForm.teamBPlayer1, matchForm.teamBPlayer2],
-          scoreA,
-          scoreB
-        })
+        body: JSON.stringify(payload)
+      });
+
+      const raw = await res.text().catch(() => "");
+      let parsed: unknown = null;
+      if (raw) {
+        try {
+          parsed = JSON.parse(raw) as unknown;
+        } catch {
+          parsed = null;
+        }
+      }
+
+      setLastMatchSubmitDebug((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          phase: "response",
+          response: {
+            status: res.status,
+            ok: res.ok,
+            rawBody: raw,
+            parsedBody: parsed
+          }
+        };
       });
 
       if (!res.ok) {
-        const raw = await res.text().catch(() => "");
-        let parsed: { message?: string; error?: string } | null = null;
-
-        if (raw) {
-          try {
-            parsed = JSON.parse(raw) as { message?: string; error?: string };
-          } catch {
-            parsed = null;
-          }
-        }
+        const parsedObject = typeof parsed === "object" && parsed !== null
+          ? (parsed as { message?: string; error?: string; traceId?: string })
+          : null;
 
         const normalizedRaw = raw.trim();
         const fallbackText = normalizedRaw && !normalizedRaw.startsWith("<") ? normalizedRaw : "";
-        failMatchValidation(parsed?.error ?? parsed?.message ?? fallbackText ?? "Failed to record match.");
+        const trace = parsedObject?.traceId ? ` (trace: ${parsedObject.traceId})` : "";
+        failMatchValidation((parsedObject?.error ?? parsedObject?.message ?? fallbackText ?? "Failed to record match.") + trace);
         return;
       }
 
@@ -755,6 +814,14 @@ function AdminPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const networkMessage = `Network error: ${msg}`;
+      setLastMatchSubmitDebug((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          phase: "network-error",
+          error: networkMessage
+        };
+      });
       setMatchError(networkMessage);
       setAdminMessage(networkMessage);
       setTimeout(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, 50);
@@ -762,7 +829,22 @@ function AdminPage() {
       return;
     }
     await loadAdminData().catch(() => {
+      setLastMatchSubmitDebug((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          phase: "refresh-failed",
+          error: "Saved, but list refresh failed."
+        };
+      });
       setAdminMessage((prev) => prev ? `${prev} (saved, but list refresh failed)` : "Saved, but list refresh failed.");
+    });
+    setLastMatchSubmitDebug((prev) => {
+      if (!prev || prev.phase === "refresh-failed") return prev;
+      return {
+        ...prev,
+        phase: "refresh-success"
+      };
     });
     setIsSavingMatch(false);
   };
@@ -858,6 +940,12 @@ function AdminPage() {
           <form className="match-form" onSubmit={onRecordMatch} noValidate>
             {matchError ? <p className="form-error" style={{fontSize: "1rem", padding: "0.75rem", marginBottom: "0.5rem"}}>{matchError}</p> : null}
             {matchSuccess ? <p className="status-msg" style={{fontSize: "1rem", padding: "0.75rem", marginBottom: "0.5rem", background: "#d4edda", border: "1px solid #28a745", borderRadius: "4px"}}>{matchSuccess}</p> : null}
+            {lastMatchSubmitDebug ? (
+              <details style={{ marginBottom: "0.75rem" }}>
+                <summary>Match Submit Debug (last attempt)</summary>
+                <pre className="auth-debug" style={{ marginTop: "0.5rem" }}>{JSON.stringify(lastMatchSubmitDebug, null, 2)}</pre>
+              </details>
+            ) : null}
             <label>
               League
               <select value={matchForm.leagueId} onChange={(e) => setMatchForm((prev) => ({ ...prev, leagueId: e.target.value }))}>

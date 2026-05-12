@@ -12,6 +12,8 @@ const requireAdmin = (request) => {
   return isAdmin(request) ? null : unauthorized();
 };
 
+const createTraceId = () => `match-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
 app.http("health", {
   methods: ["GET"],
   route: "health",
@@ -499,6 +501,7 @@ const saveMatch = async (payload, existingMatchId = null) => {
   const gameType = payload.gameType === "Ladder" ? "Ladder" : "Doubles";
   const scoringType = payload.scoringType === "Rally" ? "Rally" : "Standard";
   const isDoubles = gameType === "Doubles";
+  const traceId = createTraceId();
 
   const allPlayers = [
     ...(payload.teamAPlayers ?? []),
@@ -529,6 +532,9 @@ const saveMatch = async (payload, existingMatchId = null) => {
 
   try {
     await tx.begin();
+    let participantsDeleted = 0;
+    let participantsInserted = 0;
+    let matchesUpdated = 0;
 
     let matchId = existingMatchId;
     if (!existingMatchId) {
@@ -562,7 +568,7 @@ const saveMatch = async (payload, existingMatchId = null) => {
       updateRequest.input("scoreA", sql.Int, payload.scoreA);
       updateRequest.input("scoreB", sql.Int, payload.scoreB);
 
-      await updateRequest.query(`
+      const updateResult = await updateRequest.query(`
         UPDATE matches
         SET league_id = @leagueId,
             court_id = @courtId,
@@ -575,10 +581,16 @@ const saveMatch = async (payload, existingMatchId = null) => {
             score_b = @scoreB
         WHERE id = @id;
       `);
+      matchesUpdated = updateResult.rowsAffected?.[0] ?? 0;
+
+      if (matchesUpdated === 0) {
+        throw new Error(`No match row was updated for id ${existingMatchId}.`);
+      }
 
       const clearParticipantsRequest = new sql.Request(tx);
       clearParticipantsRequest.input("matchId", sql.UniqueIdentifier, existingMatchId);
-      await clearParticipantsRequest.query("DELETE FROM match_participants WHERE match_id = @matchId;");
+      const clearResult = await clearParticipantsRequest.query("DELETE FROM match_participants WHERE match_id = @matchId;");
+      participantsDeleted = clearResult.rowsAffected?.[0] ?? 0;
     }
 
     for (let i = 0; i < payload.teamAPlayers.length; i += 1) {
@@ -592,6 +604,7 @@ const saveMatch = async (payload, existingMatchId = null) => {
         INSERT INTO match_participants (match_id, player_id, team_side, team_id, participant_order)
         VALUES (@matchId, @playerId, @teamSide, @teamId, @participantOrder);
       `);
+      participantsInserted += 1;
     }
 
     for (let i = 0; i < payload.teamBPlayers.length; i += 1) {
@@ -605,13 +618,55 @@ const saveMatch = async (payload, existingMatchId = null) => {
         INSERT INTO match_participants (match_id, player_id, team_side, team_id, participant_order)
         VALUES (@matchId, @playerId, @teamSide, @teamId, @participantOrder);
       `);
+      participantsInserted += 1;
     }
 
     await tx.commit();
-    return json({ id: matchId }, existingMatchId ? 200 : 201);
+    return json(
+      {
+        id: matchId,
+        traceId,
+        mode: existingMatchId ? "update" : "create",
+        debug: {
+          matchesUpdated,
+          participantsDeleted,
+          participantsInserted,
+          gameType,
+          scoringType,
+          teamAId,
+          teamBId,
+          playerIds: allPlayers
+        }
+      },
+      existingMatchId ? 200 : 201
+    );
   } catch (error) {
-    await tx.rollback();
-    return serverError(error.message);
+    try {
+      await tx.rollback();
+    } catch {
+      // Rollback errors should not hide the original database error.
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    return json(
+      {
+        error: message,
+        message,
+        traceId,
+        debug: {
+          mode: existingMatchId ? "update" : "create",
+          existingMatchId,
+          gameType,
+          scoringType,
+          teamAId,
+          teamBId,
+          playerIds: allPlayers,
+          scoreA: payload.scoreA,
+          scoreB: payload.scoreB
+        }
+      },
+      500
+    );
   }
 };
 
