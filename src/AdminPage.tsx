@@ -784,8 +784,10 @@ function AdminPage() {
 
         const normalizedRaw = raw.trim();
         const fallbackText = normalizedRaw && !normalizedRaw.startsWith("<") ? normalizedRaw : "";
+        const statusText = [res.status, res.statusText].filter(Boolean).join(" ");
+        const fallbackMessage = fallbackText || `Failed to record match (HTTP ${statusText || res.status}).`;
         const trace = parsedObject?.traceId ? ` (trace: ${parsedObject.traceId})` : "";
-        failMatchValidation((parsedObject?.error ?? parsedObject?.message ?? fallbackText ?? "Failed to record match.") + trace);
+        failMatchValidation((parsedObject?.error || parsedObject?.message || fallbackMessage) + trace);
         return;
       }
 
