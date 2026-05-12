@@ -13,6 +13,18 @@ const requireAdmin = (request) => {
 };
 
 const createTraceId = () => `match-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+const apiDiagnosticsVersion = "2026-05-12-d09cd75-debug2";
+
+app.http("adminDiagnostics", {
+  methods: ["GET"],
+  route: "ops/diagnostics",
+  handler: async (request) => {
+    const authError = requireAdmin(request);
+    if (authError) return authError;
+
+    return json({ version: apiDiagnosticsVersion, timestamp: new Date().toISOString() });
+  }
+});
 
 app.http("health", {
   methods: ["GET"],

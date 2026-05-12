@@ -112,6 +112,11 @@ interface MatchSubmitDebug {
   error?: string;
 }
 
+interface ApiDiagnostics {
+  version: string;
+  timestamp: string;
+}
+
 const emptyPlayerForm: PlayerForm = {
   firstName: "",
   lastName: "",
@@ -192,6 +197,7 @@ function AdminPage() {
   const [matchSuccess, setMatchSuccess] = useState("");
   const [isSavingMatch, setIsSavingMatch] = useState(false);
   const [lastMatchSubmitDebug, setLastMatchSubmitDebug] = useState<MatchSubmitDebug | null>(null);
+  const [apiDiagnostics, setApiDiagnostics] = useState<ApiDiagnostics | null>(null);
   const [adminMessage, setAdminMessage] = useState("");
   const [csvDate, setCsvDate] = useState(new Date().toISOString().slice(0, 10));
   const [adminApiBase, setAdminApiBase] = useState("/api/ops");
@@ -394,6 +400,18 @@ function AdminPage() {
     setTeams(loadedTeams);
     setPlayers(loadedPlayers);
     setMatches(loadedMatches);
+
+    try {
+      const diagRes = await authFetch(`${base}/diagnostics`);
+      if (diagRes.ok) {
+        const diag = await diagRes.json() as ApiDiagnostics;
+        setApiDiagnostics(diag);
+      } else {
+        setApiDiagnostics(null);
+      }
+    } catch {
+      setApiDiagnostics(null);
+    }
 
     const activeLoadedLeagues = loadedLeagues.filter((league) => league.isActive);
     const activeLoadedCourts = loadedCourts.filter((court) => court.isActive);
@@ -945,6 +963,15 @@ function AdminPage() {
             {lastMatchSubmitDebug ? (
               <details style={{ marginBottom: "0.75rem" }}>
                 <summary>Match Submit Debug (last attempt)</summary>
+                {apiDiagnostics ? (
+                  <p className="status-msg" style={{ marginTop: "0.5rem" }}>
+                    API diagnostics: {apiDiagnostics.version} ({apiDiagnostics.timestamp})
+                  </p>
+                ) : (
+                  <p className="status-msg" style={{ marginTop: "0.5rem" }}>
+                    API diagnostics unavailable.
+                  </p>
+                )}
                 <pre className="auth-debug" style={{ marginTop: "0.5rem" }}>{JSON.stringify(lastMatchSubmitDebug, null, 2)}</pre>
               </details>
             ) : null}
@@ -1170,7 +1197,6 @@ function AdminPage() {
                 <input type="number" min={0} step={1} value={matchForm.scoreB} onChange={(e) => setMatchForm((prev) => ({ ...prev, scoreB: e.target.value }))} required />
               </label>
             </div>
-            {matchError ? <p className="form-error" style={{fontSize: "1rem", padding: "0.75rem", marginBottom: "0.5rem"}}>{matchError}</p> : null}
             <button type="submit" disabled={isSavingMatch}>
               {isSavingMatch ? (editingMatchId ? "Updating..." : "Saving...") : (editingMatchId ? "Update Match" : "Save Match")}
             </button>
