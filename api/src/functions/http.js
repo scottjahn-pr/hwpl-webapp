@@ -791,13 +791,36 @@ app.http("adminMatchesItem", {
   methods: ["PUT", "DELETE"],
   route: "ops/matches/{id}",
   handler: async (request, context) => {
-    const authError = requireAdmin(request);
-    if (authError) return authError;
-
-    const id = context.bindingData.id;
-    if (!id) return badRequest("Missing route parameter: id.");
-
     try {
+      const authError = requireAdmin(request);
+      if (authError) return authError;
+
+      const idFromContext = context?.bindingData?.id;
+      const idFromParamsObject = request?.params && typeof request.params === "object"
+        ? request.params.id
+        : undefined;
+      const idFromParamsMap = request?.params && typeof request.params.get === "function"
+        ? request.params.get("id")
+        : undefined;
+      const id = idFromContext || idFromParamsObject || idFromParamsMap;
+
+      if (!id) {
+        return json(
+          {
+            error: "Missing route parameter: id.",
+            message: "Missing route parameter: id.",
+            traceId: createTraceId(),
+            debug: {
+              hasContext: Boolean(context),
+              hasBindingData: Boolean(context?.bindingData),
+              requestUrl: request.url,
+              method: request.method
+            }
+          },
+          400
+        );
+      }
+
       if (request.method === "DELETE") {
         await runQuery("DELETE FROM matches WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
         return json({ deleted: true });
@@ -809,8 +832,28 @@ app.http("adminMatchesItem", {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const traceId = createTraceId();
-      console.error("adminMatchesItem failed", { traceId, id, message });
-      return json({ error: message, message, traceId, id }, 409);
+      console.error("adminMatchesItem failed", {
+        traceId,
+        message,
+        method: request.method,
+        url: request.url,
+        hasContext: Boolean(context),
+        hasBindingData: Boolean(context?.bindingData)
+      });
+      return json(
+        {
+          error: message,
+          message,
+          traceId,
+          debug: {
+            method: request.method,
+            url: request.url,
+            hasContext: Boolean(context),
+            hasBindingData: Boolean(context?.bindingData)
+          }
+        },
+        409
+      );
     }
   }
 });
