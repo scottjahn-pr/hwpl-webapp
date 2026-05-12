@@ -587,6 +587,7 @@ function AdminPage() {
   const onEditMatch = (match: ManagedMatch) => {
     setEditingMatchId(match.id);
     setMatchError("");
+    setMatchSuccess("");
     setMatchForm({
       leagueId: match.leagueId,
       courtId: match.courtId,
@@ -631,37 +632,44 @@ function AdminPage() {
     setMatchError("");
     setMatchSuccess("");
 
+    const failMatchValidation = (message: string) => {
+      setMatchError(message);
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }, 50);
+    };
+
     if (!matchForm.courtId) {
-      setMatchError("Please select a court.");
+      failMatchValidation("Please select a court.");
       return;
     }
 
     if (matchForm.gameType === "Doubles" && (!matchForm.teamAId || !matchForm.teamBId)) {
-      setMatchError("Please select both teams.");
+      failMatchValidation("Please select both teams.");
       return;
     }
 
     const pickedPlayersEarly = [matchForm.teamAPlayer1, matchForm.teamAPlayer2, matchForm.teamBPlayer1, matchForm.teamBPlayer2];
     if (pickedPlayersEarly.some((id) => !id)) {
-      setMatchError("Please select all four players.");
+      failMatchValidation("Please select all four players.");
       return;
     }
 
     if (matchForm.gameType === "Doubles" && matchForm.teamAId === matchForm.teamBId) {
-      setMatchError("Team A and Team B must be different.");
+      failMatchValidation("Team A and Team B must be different.");
       return;
     }
 
     const pickedPlayers = [matchForm.teamAPlayer1, matchForm.teamAPlayer2, matchForm.teamBPlayer1, matchForm.teamBPlayer2];
     if (new Set(pickedPlayers).size !== 4) {
-      setMatchError("All selected players must be unique within a match.");
+      failMatchValidation("All selected players must be unique within a match.");
       return;
     }
 
     const scoreA = Number(matchForm.scoreA);
     const scoreB = Number(matchForm.scoreB);
     if (!Number.isInteger(scoreA) || !Number.isInteger(scoreB) || scoreA < 0 || scoreB < 0 || scoreA === scoreB) {
-      setMatchError("Scores must be whole numbers and cannot be tied.");
+      failMatchValidation("Scores must be whole numbers and cannot be tied.");
       return;
     }
 
@@ -699,8 +707,7 @@ function AdminPage() {
 
         const normalizedRaw = raw.trim();
         const fallbackText = normalizedRaw && !normalizedRaw.startsWith("<") ? normalizedRaw : "";
-        setMatchError(parsed?.error ?? parsed?.message ?? fallbackText ?? "Failed to record match.");
-        matchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        failMatchValidation(parsed?.error ?? parsed?.message ?? fallbackText ?? "Failed to record match.");
         return;
       }
 
