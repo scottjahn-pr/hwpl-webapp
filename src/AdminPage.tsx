@@ -668,6 +668,7 @@ function AdminPage() {
     try {
       const wasEditing = Boolean(editingMatchId);
       const res = await authFetch(editingMatchId ? `${adminApiBase}/matches/${editingMatchId}` : `${adminApiBase}/matches`, {
+        method: editingMatchId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           leagueId: matchForm.leagueId,
