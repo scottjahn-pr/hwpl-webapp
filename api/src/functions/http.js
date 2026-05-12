@@ -648,6 +648,19 @@ const saveMatch = async (payload, existingMatchId = null) => {
     }
 
     const message = error instanceof Error ? error.message : String(error);
+    const sqlError = (typeof error === "object" && error !== null
+      ? error
+      : {}) ;
+    console.error("saveMatch failed", {
+      traceId,
+      mode: existingMatchId ? "update" : "create",
+      message,
+      code: sqlError.code,
+      number: sqlError.number,
+      state: sqlError.state,
+      class: sqlError.class,
+      lineNumber: sqlError.lineNumber
+    });
     return json(
       {
         error: message,
@@ -662,10 +675,17 @@ const saveMatch = async (payload, existingMatchId = null) => {
           teamBId,
           playerIds: allPlayers,
           scoreA: payload.scoreA,
-          scoreB: payload.scoreB
+          scoreB: payload.scoreB,
+          sql: {
+            code: sqlError.code ?? null,
+            number: sqlError.number ?? null,
+            state: sqlError.state ?? null,
+            class: sqlError.class ?? null,
+            lineNumber: sqlError.lineNumber ?? null
+          }
         }
       },
-      500
+      409
     );
   }
 };
@@ -747,7 +767,10 @@ app.http("adminMatchesCollection", {
       if (!payload) return badRequest("Invalid JSON body.");
       return saveMatch(payload);
     } catch (error) {
-      return serverError(error.message);
+      const message = error instanceof Error ? error.message : String(error);
+      const traceId = createTraceId();
+      console.error("adminMatchesCollection failed", { traceId, message });
+      return json({ error: message, message, traceId }, 500);
     }
   }
 });
@@ -772,7 +795,10 @@ app.http("adminMatchesItem", {
       if (!payload) return badRequest("Invalid JSON body.");
       return saveMatch(payload, id);
     } catch (error) {
-      return serverError(error.message);
+      const message = error instanceof Error ? error.message : String(error);
+      const traceId = createTraceId();
+      console.error("adminMatchesItem failed", { traceId, id, message });
+      return json({ error: message, message, traceId, id }, 409);
     }
   }
 });
