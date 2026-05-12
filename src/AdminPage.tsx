@@ -142,6 +142,7 @@ function AdminPage() {
   const [editingLeagueId, setEditingLeagueId] = useState<string | null>(null);
   const [editingCourtId, setEditingCourtId] = useState<string | null>(null);
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
+  const matchFormRef = useRef<HTMLElement>(null);
 
   const [matchForm, setMatchForm] = useState<MatchForm>({
     leagueId: "",
@@ -554,6 +555,7 @@ function AdminPage() {
 
   const onEditMatch = (match: ManagedMatch) => {
     setEditingMatchId(match.id);
+    setMatchError("");
     setMatchForm({
       leagueId: match.leagueId,
       courtId: match.courtId,
@@ -569,7 +571,9 @@ function AdminPage() {
       scoreA: String(match.scoreA),
       scoreB: String(match.scoreB)
     });
-    setAdminMessage(`Editing match from ${match.date}. Save to apply updates.`);
+    setTimeout(() => {
+      matchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
   };
 
   const onCancelMatchEdit = () => {
@@ -750,10 +754,10 @@ function AdminPage() {
       </section>
 
       <section className="admin-grid">
-        <article className="panel module-record-match">
+        <article className="panel module-record-match" ref={matchFormRef}>
           <div className="panel-header">
-            <h3>Record Match Result</h3>
-            <p>Admins can add individual match outcomes.</p>
+            <h3>{editingMatchId ? "Edit Match Result" : "Record Match Result"}</h3>
+            <p>{editingMatchId ? "Update the fields below and press Update Match to save." : "Admins can add individual match outcomes."}</p>
           </div>
           <form className="match-form" onSubmit={onRecordMatch}>
             <label>
@@ -1003,6 +1007,9 @@ function AdminPage() {
             <h3>Manage Matches</h3>
             <p>Edit or delete existing matches.</p>
           </div>
+          {editingMatchId ? (
+            <p className="status-msg">Currently editing a match — scroll up to the Record Match form to save or cancel.</p>
+          ) : null}
           <ul className="entity-list">
             {matches.map((match) => (
               <li key={match.id}>
