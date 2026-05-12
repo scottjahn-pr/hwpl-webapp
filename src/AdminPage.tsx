@@ -57,7 +57,13 @@ interface ManagedMatch {
   teamBPlayerNames: [string, string];
 }
 
-type PlayerForm = Omit<Player, "id">;
+type PlayerForm = {
+  firstName: string;
+  lastName: string;
+  duprId: string;
+  defaultTeamId: string;
+  isActive: boolean;
+};
 type TeamForm = { name: string; leagueIds: string[]; isActive: boolean };
 type LeagueForm = Omit<League, "id">;
 type CourtForm = Omit<Court, "id">;
@@ -318,14 +324,12 @@ function AdminPage() {
 
     const activeLoadedLeagues = loadedLeagues.filter((league) => league.isActive);
     const activeLoadedCourts = loadedCourts.filter((court) => court.isActive);
-    const activeLoadedTeams = loadedTeams.filter((team) => team.isActive);
 
     if (!editingTeamIdRef.current) {
       const activeLoadedLeagueIds = activeLoadedLeagues.map((l) => l.id);
       setTeamForm((prev) => ({ ...prev, leagueIds: activeLoadedLeagueIds }));
     }
 
-    setPlayerForm((prev) => ({ ...prev, defaultTeamId: prev.defaultTeamId || activeLoadedTeams[0]?.id || "" }));
     setMatchForm((prev) => ({
       ...prev,
       leagueId: prev.leagueId || activeLoadedLeagues[0]?.id || "",
@@ -399,7 +403,7 @@ function AdminPage() {
       if (!res.ok) throw new Error("failed");
       setAdminMessage(editingPlayerId ? "Player updated." : "Player added.");
       setEditingPlayerId(null);
-      setPlayerForm({ ...emptyPlayerForm, defaultTeamId: activeTeams[0]?.id ?? "" });
+      setPlayerForm({ ...emptyPlayerForm });
       await loadAdminData();
     } catch {
       setAdminMessage("Error saving player.");
@@ -1030,8 +1034,8 @@ function AdminPage() {
                 <select
                   value={playerForm.defaultTeamId}
                   onChange={(e) => setPlayerForm((prev) => ({ ...prev, defaultTeamId: e.target.value }))}
-                  required
                 >
+                  <option value="">No default team</option>
                   {activeTeams.map((team) => (
                     <option key={team.id} value={team.id}>
                       {team.name}
@@ -1055,7 +1059,7 @@ function AdminPage() {
                         firstName: player.firstName,
                         lastName: player.lastName,
                         duprId: player.duprId,
-                        defaultTeamId: player.defaultTeamId,
+                        defaultTeamId: player.defaultTeamId ?? "",
                         isActive: player.isActive
                       });
                     }}

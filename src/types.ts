@@ -27,7 +27,7 @@ export interface Player {
   firstName: string;
   lastName: string;
   duprId: string;
-  defaultTeamId: string;
+  defaultTeamId: string | null;
   isActive: boolean;
 }
 
