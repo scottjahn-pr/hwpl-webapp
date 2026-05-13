@@ -99,19 +99,150 @@ app.http("statsMatches", {
   handler: async () => {
     try {
       const result = await runQuery(`
+        WITH ladder_side_names AS (
+          SELECT
+            m.id AS match_id,
+            mp.team_side,
+            STUFF((
+              SELECT ' & ' + p2.first_name
+              FROM match_participants mp2
+              JOIN players p2 ON p2.id = mp2.player_id
+              WHERE mp2.match_id = m.id AND mp2.team_side = mp.team_side
+              ORDER BY mp2.participant_order
+              FOR XML PATH(''), TYPE
+            ).value('.', 'nvarchar(max)'), 1, 3, '') AS side_name
+          FROM matches m
+          JOIN match_participants mp ON mp.match_id = m.id
+          WHERE m.game_type = 'Ladder'
+          GROUP BY m.id, mp.team_side
+        )
         SELECT TOP 10
           m.id,
           CONVERT(varchar(10), m.match_date, 120) AS date,
-          COALESCE(ta.name, 'Ladder Side A') AS teamA,
-          COALESCE(tb.name, 'Ladder Side B') AS teamB,
+          CASE
+            WHEN m.game_type = 'Ladder' THEN COALESCE(lsa.side_name, 'Ladder Side A')
+            ELSE COALESCE(ta.name, 'Ladder Side A')
+          END AS teamA,
+          CASE
+            WHEN m.game_type = 'Ladder' THEN COALESCE(lsb.side_name, 'Ladder Side B')
+            ELSE COALESCE(tb.name, 'Ladder Side B')
+          END AS teamB,
           m.score_a AS scoreA,
           m.score_b AS scoreB
         FROM matches m
         LEFT JOIN teams ta ON ta.id = m.team_a_id
         LEFT JOIN teams tb ON tb.id = m.team_b_id
+        LEFT JOIN ladder_side_names lsa ON lsa.match_id = m.id AND lsa.team_side = 'A'
+        LEFT JOIN ladder_side_names lsb ON lsb.match_id = m.id AND lsb.team_side = 'B'
         ORDER BY m.match_date DESC, m.created_at DESC;
       `);
       return json(result.recordset);
+    } catch (error) {
+      return serverError(error.message);
+    }
+  }
+});
+
+app.http("statsMatchesFull", {
+  methods: ["GET"],
+  route: "stats/matches-full",
+  handler: async () => {
+    try {
+      const result = await runQuery(`
+        WITH ladder_side_names AS (
+          SELECT
+            m.id AS match_id,
+            mp.team_side,
+            STUFF((
+              SELECT ' & ' + p2.first_name
+              FROM match_participants mp2
+              JOIN players p2 ON p2.id = mp2.player_id
+              WHERE mp2.match_id = m.id AND mp2.team_side = mp.team_side
+              ORDER BY mp2.participant_order
+              FOR XML PATH(''), TYPE
+            ).value('.', 'nvarchar(max)'), 1, 3, '') AS side_name
+          FROM matches m
+          JOIN match_participants mp ON mp.match_id = m.id
+          WHERE m.game_type = 'Ladder'
+          GROUP BY m.id, mp.team_side
+        )
+        SELECT
+          m.id,
+          CONVERT(varchar(10), m.match_date, 120) AS date,
+          m.league_id AS leagueId,
+          l.name AS leagueName,
+          CONVERT(varchar(10), l.start_date, 120) AS leagueStartDate,
+          CONVERT(varchar(10), l.end_date, 120) AS leagueEndDate,
+          m.court_id AS courtId,
+          COALESCE(c.name, 'Unassigned Court') AS courtName,
+          m.scoring_type AS scoringType,
+          m.game_type AS gameType,
+          m.team_a_id AS teamAId,
+          m.team_b_id AS teamBId,
+          CASE
+            WHEN m.game_type = 'Ladder' THEN COALESCE(lsa.side_name, 'Ladder Side A')
+            ELSE COALESCE(ta.name, 'Ladder Side A')
+          END AS teamAName,
+          CASE
+            WHEN m.game_type = 'Ladder' THEN COALESCE(lsb.side_name, 'Ladder Side B')
+            ELSE COALESCE(tb.name, 'Ladder Side B')
+          END AS teamBName,
+          m.score_a AS scoreA,
+          m.score_b AS scoreB,
+          mp.player_id AS playerId,
+          p.first_name + ' ' + p.last_name AS playerName,
+          mp.team_side AS teamSide,
+          mp.participant_order AS participantOrder,
+          mp.team_id AS participantTeamId
+        FROM matches m
+        JOIN leagues l ON l.id = m.league_id
+        LEFT JOIN courts c ON c.id = m.court_id
+        LEFT JOIN teams ta ON ta.id = m.team_a_id
+        LEFT JOIN teams tb ON tb.id = m.team_b_id
+        LEFT JOIN ladder_side_names lsa ON lsa.match_id = m.id AND lsa.team_side = 'A'
+        LEFT JOIN ladder_side_names lsb ON lsb.match_id = m.id AND lsb.team_side = 'B'
+        LEFT JOIN match_participants mp ON mp.match_id = m.id
+        LEFT JOIN players p ON p.id = mp.player_id
+        ORDER BY m.match_date DESC, m.created_at DESC, mp.team_side, mp.participant_order;
+      `);
+
+      const matchesById = new Map();
+
+      for (const row of result.recordset) {
+        if (!matchesById.has(row.id)) {
+          matchesById.set(row.id, {
+            id: row.id,
+            date: row.date,
+            leagueId: row.leagueId,
+            leagueName: row.leagueName,
+            leagueStartDate: row.leagueStartDate,
+            leagueEndDate: row.leagueEndDate,
+            courtId: row.courtId,
+            courtName: row.courtName,
+            scoringType: row.scoringType,
+            gameType: row.gameType,
+            teamAId: row.teamAId,
+            teamBId: row.teamBId,
+            teamAName: row.teamAName,
+            teamBName: row.teamBName,
+            scoreA: row.scoreA,
+            scoreB: row.scoreB,
+            participants: []
+          });
+        }
+
+        if (row.playerId) {
+          matchesById.get(row.id).participants.push({
+            playerId: row.playerId,
+            playerName: row.playerName,
+            teamSide: row.teamSide,
+            participantOrder: row.participantOrder,
+            teamId: row.participantTeamId
+          });
+        }
+      }
+
+      return json(Array.from(matchesById.values()));
     } catch (error) {
       return serverError(error.message);
     }
@@ -914,8 +1045,14 @@ app.http("adminMatchesCollection", {
             m.score_b AS scoreB,
             l.name + ' (' + CONVERT(varchar(10), l.start_date, 120) + ')' AS leagueName,
             c.name AS courtName,
-            COALESCE(ta.name, 'Ladder Side A') AS teamAName,
-            COALESCE(tb.name, 'Ladder Side B') AS teamBName,
+            CASE
+              WHEN m.game_type = 'Ladder' THEN pa1.first_name + ' & ' + pa2.first_name
+              ELSE COALESCE(ta.name, 'Ladder Side A')
+            END AS teamAName,
+            CASE
+              WHEN m.game_type = 'Ladder' THEN pb1.first_name + ' & ' + pb2.first_name
+              ELSE COALESCE(tb.name, 'Ladder Side B')
+            END AS teamBName,
             mpa1.player_id AS teamAPlayer1,
             mpa2.player_id AS teamAPlayer2,
             mpb1.player_id AS teamBPlayer1,

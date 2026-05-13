@@ -77,6 +77,34 @@ export interface RecentMatch {
   scoreB: number;
 }
 
+export interface MatchParticipantDetail {
+  playerId: string;
+  playerName: string;
+  teamSide: TeamSide;
+  participantOrder: number;
+  teamId: string | null;
+}
+
+export interface PublicMatch {
+  id: string;
+  date: string;
+  leagueId: string;
+  leagueName: string;
+  leagueStartDate: string;
+  leagueEndDate: string;
+  courtId: string | null;
+  courtName: string;
+  scoringType: "Standard" | "Rally";
+  gameType: "Doubles" | "Ladder";
+  teamAId: string | null;
+  teamBId: string | null;
+  teamAName: string;
+  teamBName: string;
+  scoreA: number;
+  scoreB: number;
+  participants: MatchParticipantDetail[];
+}
+
 export interface SessionTeamStat {
   teamId: string;
   teamName: string;
