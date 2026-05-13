@@ -910,9 +910,9 @@ function AdminPage() {
       setMatchForm({
         leagueId: matchForm.leagueId,
         courtId: matchForm.courtId,
-        scoringType: "Standard",
-        gameType: "Doubles",
-        date: new Date().toISOString().slice(0, 10),
+        scoringType: matchForm.scoringType,
+        gameType: matchForm.gameType,
+        date: matchForm.date,
         teamAId: "",
         teamBId: "",
         teamAPlayer1: "",
