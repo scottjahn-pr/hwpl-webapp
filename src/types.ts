@@ -76,3 +76,34 @@ export interface RecentMatch {
   scoreA: number;
   scoreB: number;
 }
+
+export interface SessionTeamStat {
+  teamId: string;
+  teamName: string;
+  gamesPlayed: number;
+  wins: number;
+  losses: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  differential: number;
+  winRate: number;
+}
+
+export interface SessionPlayerStat {
+  playerId: string;
+  playerName: string;
+  gamesPlayed: number;
+  wins: number;
+  losses: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  differential: number;
+  winRate: number;
+}
+
+export interface SessionCourtEntry {
+  courtId: string;
+  courtName: string;
+  doubles: SessionTeamStat[];
+  ladder: SessionPlayerStat[];
+}

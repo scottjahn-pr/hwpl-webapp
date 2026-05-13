@@ -225,6 +225,132 @@ app.http("statsLeagues", {
   }
 });
 
+app.http("statsSessionDates", {
+  methods: ["GET"],
+  route: "stats/session-dates",
+  handler: async () => {
+    try {
+      const result = await runQuery(`
+        SELECT DISTINCT CONVERT(varchar(10), match_date, 120) AS sessionDate
+        FROM matches
+        ORDER BY sessionDate DESC;
+      `);
+      return json(result.recordset.map(r => r.sessionDate));
+    } catch (error) {
+      return serverError(error.message);
+    }
+  }
+});
+
+app.http("statsSession", {
+  methods: ["GET"],
+  route: "stats/session",
+  handler: async (request) => {
+    try {
+      const date = new URL(request.url).searchParams.get("date");
+      if (!date) return badRequest("Missing query param: date");
+
+      const doublesResult = await runQuery(`
+        WITH match_teams AS (
+          SELECT c.id AS court_id, c.name AS court_name,
+            m.team_a_id AS team_id, ta.name AS team_name,
+            m.score_a AS pf, m.score_b AS pa,
+            CASE WHEN m.score_a > m.score_b THEN 1 ELSE 0 END AS win
+          FROM matches m
+          JOIN courts c ON c.id = m.court_id
+          JOIN teams ta ON ta.id = m.team_a_id
+          WHERE m.game_type = 'Doubles'
+            AND CONVERT(varchar(10), m.match_date, 120) = @date
+            AND m.team_a_id IS NOT NULL AND m.team_b_id IS NOT NULL
+          UNION ALL
+          SELECT c.id, c.name,
+            m.team_b_id, tb.name,
+            m.score_b, m.score_a,
+            CASE WHEN m.score_b > m.score_a THEN 1 ELSE 0 END
+          FROM matches m
+          JOIN courts c ON c.id = m.court_id
+          JOIN teams tb ON tb.id = m.team_b_id
+          WHERE m.game_type = 'Doubles'
+            AND CONVERT(varchar(10), m.match_date, 120) = @date
+            AND m.team_a_id IS NOT NULL AND m.team_b_id IS NOT NULL
+        )
+        SELECT court_id AS courtId, court_name AS courtName,
+          team_id AS teamId, team_name AS teamName,
+          COUNT(*) AS gamesPlayed,
+          SUM(win) AS wins,
+          COUNT(*) - SUM(win) AS losses,
+          SUM(pf) AS pointsFor,
+          SUM(pa) AS pointsAgainst,
+          SUM(pf) - SUM(pa) AS differential,
+          CASE WHEN COUNT(*) = 0 THEN 0 ELSE CAST(SUM(win) AS float) / COUNT(*) END AS winRate
+        FROM match_teams
+        GROUP BY court_id, court_name, team_id, team_name
+        ORDER BY court_name, wins DESC, winRate DESC;
+      `, [{ name: "date", type: sql.NVarChar(10), value: date }]);
+
+      const ladderResult = await runQuery(`
+        WITH player_games AS (
+          SELECT c.id AS court_id, c.name AS court_name,
+            p.id AS player_id,
+            p.first_name + ' ' + p.last_name AS player_name,
+            CASE WHEN (mp.team_side = 'A' AND m.score_a > m.score_b) OR (mp.team_side = 'B' AND m.score_b > m.score_a) THEN 1 ELSE 0 END AS win,
+            CASE WHEN mp.team_side = 'A' THEN m.score_a ELSE m.score_b END AS pf,
+            CASE WHEN mp.team_side = 'A' THEN m.score_b ELSE m.score_a END AS pa
+          FROM matches m
+          JOIN courts c ON c.id = m.court_id
+          JOIN match_participants mp ON mp.match_id = m.id
+          JOIN players p ON p.id = mp.player_id
+          WHERE m.game_type = 'Ladder'
+            AND CONVERT(varchar(10), m.match_date, 120) = @date
+        )
+        SELECT court_id AS courtId, court_name AS courtName,
+          player_id AS playerId, player_name AS playerName,
+          COUNT(*) AS gamesPlayed,
+          SUM(win) AS wins,
+          COUNT(*) - SUM(win) AS losses,
+          SUM(pf) AS pointsFor,
+          SUM(pa) AS pointsAgainst,
+          SUM(pf) - SUM(pa) AS differential,
+          CASE WHEN COUNT(*) = 0 THEN 0 ELSE CAST(SUM(win) AS float) / COUNT(*) END AS winRate
+        FROM player_games
+        GROUP BY court_id, court_name, player_id, player_name
+        ORDER BY court_name, wins DESC, winRate DESC;
+      `, [{ name: "date", type: sql.NVarChar(10), value: date }]);
+
+      const courtsMap = new Map();
+
+      for (const row of doublesResult.recordset) {
+        if (!courtsMap.has(row.courtId)) {
+          courtsMap.set(row.courtId, { courtId: row.courtId, courtName: row.courtName, doubles: [], ladder: [] });
+        }
+        courtsMap.get(row.courtId).doubles.push({
+          teamId: row.teamId, teamName: row.teamName,
+          gamesPlayed: row.gamesPlayed, wins: row.wins, losses: row.losses,
+          pointsFor: row.pointsFor, pointsAgainst: row.pointsAgainst,
+          differential: row.differential, winRate: row.winRate
+        });
+      }
+
+      for (const row of ladderResult.recordset) {
+        if (!courtsMap.has(row.courtId)) {
+          courtsMap.set(row.courtId, { courtId: row.courtId, courtName: row.courtName, doubles: [], ladder: [] });
+        }
+        courtsMap.get(row.courtId).ladder.push({
+          playerId: row.playerId, playerName: row.playerName,
+          gamesPlayed: row.gamesPlayed, wins: row.wins, losses: row.losses,
+          pointsFor: row.pointsFor, pointsAgainst: row.pointsAgainst,
+          differential: row.differential, winRate: row.winRate
+        });
+      }
+
+      const courts = [...courtsMap.values()].sort((a, b) => a.courtName.localeCompare(b.courtName));
+      return json(courts);
+    } catch (error) {
+      return serverError(error.message);
+    }
+  }
+});
+
 const handleAdminPlayers = async (request, id) => {
   const authError = requireAdmin(request);
   if (authError) return authError;
