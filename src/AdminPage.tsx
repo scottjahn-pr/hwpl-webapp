@@ -41,7 +41,7 @@ interface ManagedMatch {
   leagueId: string;
   courtId: string;
   courtName: string;
-  scoringType: "Standard" | "Rally";
+  scoringType: "Sideout" | "Rally";
   gameType: "Doubles" | "Ladder";
   date: string;
   teamAId: string;
@@ -71,7 +71,7 @@ type CourtForm = Omit<Court, "id">;
 interface MatchForm {
   leagueId: string;
   courtId: string;
-  scoringType: "Standard" | "Rally";
+  scoringType: "Sideout" | "Rally";
   gameType: "Doubles" | "Ladder";
   date: string;
   teamAId: string;
@@ -93,7 +93,7 @@ interface MatchSubmitDebug {
   payload: {
     leagueId: string;
     courtId: string;
-    scoringType: "Standard" | "Rally";
+    scoringType: "Sideout" | "Rally";
     gameType: "Doubles" | "Ladder";
     date: string;
     teamAId: string | null;
@@ -206,7 +206,7 @@ function AdminPage() {
   const [matchForm, setMatchForm] = useState<MatchForm>({
     leagueId: "",
     courtId: "",
-    scoringType: "Standard",
+    scoringType: "Sideout",
     gameType: "Doubles",
     date: new Date().toISOString().slice(0, 10),
     teamAId: "",
@@ -1114,8 +1114,8 @@ function AdminPage() {
             <div className="teams-grid">
               <label>
                 Scoring Type
-                <select value={matchForm.scoringType} onChange={(e) => setMatchForm((prev) => ({ ...prev, scoringType: e.target.value as "Standard" | "Rally" }))}>
-                  <option value="Standard">Standard</option>
+                <select value={matchForm.scoringType} onChange={(e) => setMatchForm((prev) => ({ ...prev, scoringType: e.target.value as "Sideout" | "Rally" }))}>
+                  <option value="Sideout">Sideout</option>
                   <option value="Rally">Rally</option>
                 </select>
               </label>

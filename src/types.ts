@@ -35,7 +35,7 @@ export interface Match {
   id: string;
   leagueId: string;
   courtId: string;
-  scoringType: "Standard" | "Rally";
+  scoringType: "Sideout" | "Rally";
   gameType: "Doubles" | "Ladder";
   date: string;
   teamAId: string | null;
@@ -94,7 +94,7 @@ export interface PublicMatch {
   leagueEndDate: string;
   courtId: string | null;
   courtName: string;
-  scoringType: "Standard" | "Rally";
+  scoringType: "Sideout" | "Rally";
   gameType: "Doubles" | "Ladder";
   teamAId: string | null;
   teamBId: string | null;

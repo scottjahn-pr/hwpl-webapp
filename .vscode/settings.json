@@ -1,0 +1,9 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "git -c gc.auto=0": true,
+        "git rev-parse": true,
+        "git ls-remote": true,
+        "Test-Path": true,
+        "Set-Content": true
+    }
+}

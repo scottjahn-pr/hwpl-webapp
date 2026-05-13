@@ -831,7 +831,7 @@ app.http("adminCourtsItem", {
 
 const saveMatch = async (payload, existingMatchId = null) => {
   const gameType = payload.gameType === "Ladder" ? "Ladder" : "Doubles";
-  const scoringType = payload.scoringType === "Rally" ? "Rally" : "Standard";
+  const scoringType = payload.scoringType === "Rally" ? "Rally" : "Sideout";
   const isDoubles = gameType === "Doubles";
   const traceId = createTraceId();
 

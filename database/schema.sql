@@ -56,7 +56,7 @@ CREATE TABLE dbo.matches (
   league_id UNIQUEIDENTIFIER NOT NULL,
   match_date DATE NOT NULL,
   court_id UNIQUEIDENTIFIER NULL,
-  scoring_type NVARCHAR(20) NOT NULL DEFAULT 'Standard',
+  scoring_type NVARCHAR(20) NOT NULL DEFAULT 'Sideout',
   game_type NVARCHAR(20) NOT NULL DEFAULT 'Doubles',
   team_a_id UNIQUEIDENTIFIER NULL,
   team_b_id UNIQUEIDENTIFIER NULL,
@@ -64,7 +64,7 @@ CREATE TABLE dbo.matches (
   score_b INT NOT NULL,
   created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
   CONSTRAINT CHK_matches_non_tie CHECK (score_a <> score_b),
-  CONSTRAINT CHK_matches_scoring_type CHECK (scoring_type IN ('Standard', 'Rally')),
+  CONSTRAINT CHK_matches_scoring_type CHECK (scoring_type IN ('Sideout', 'Rally')),
   CONSTRAINT CHK_matches_game_type CHECK (game_type IN ('Doubles', 'Ladder')),
   CONSTRAINT CHK_matches_teams_for_game_type CHECK (
     (game_type = 'Doubles' AND team_a_id IS NOT NULL AND team_b_id IS NOT NULL AND team_a_id <> team_b_id)

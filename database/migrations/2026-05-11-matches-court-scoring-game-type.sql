@@ -13,7 +13,7 @@ ALTER TABLE dbo.matches
 ADD court_id UNIQUEIDENTIFIER NULL;
 
 ALTER TABLE dbo.matches
-ADD scoring_type NVARCHAR(20) NOT NULL CONSTRAINT DF_matches_scoring_type DEFAULT 'Standard' WITH VALUES;
+ADD scoring_type NVARCHAR(20) NOT NULL CONSTRAINT DF_matches_scoring_type DEFAULT 'Sideout' WITH VALUES;
 
 ALTER TABLE dbo.matches
 ADD game_type NVARCHAR(20) NOT NULL CONSTRAINT DF_matches_game_type DEFAULT 'Doubles' WITH VALUES;
@@ -31,7 +31,7 @@ ALTER TABLE dbo.match_participants
 ADD CONSTRAINT FK_participants_team FOREIGN KEY (team_id) REFERENCES dbo.teams(id);
 
 ALTER TABLE dbo.matches
-ADD CONSTRAINT CHK_matches_scoring_type CHECK (scoring_type IN ('Standard', 'Rally'));
+ADD CONSTRAINT CHK_matches_scoring_type CHECK (scoring_type IN ('Sideout', 'Rally'));
 
 ALTER TABLE dbo.matches
 ADD CONSTRAINT CHK_matches_game_type CHECK (game_type IN ('Doubles', 'Ladder'));
