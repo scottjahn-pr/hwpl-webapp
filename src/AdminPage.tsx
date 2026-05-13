@@ -222,6 +222,9 @@ function AdminPage() {
   const [matchError, setMatchError] = useState("");
   const [matchSuccess, setMatchSuccess] = useState("");
   const [isSavingMatch, setIsSavingMatch] = useState(false);
+  const [matchTeamFilterId, setMatchTeamFilterId] = useState("");
+  const [matchPlayerFilterId, setMatchPlayerFilterId] = useState("");
+  const [matchDateFilter, setMatchDateFilter] = useState("");
   const [lastMatchSubmitDebug, setLastMatchSubmitDebug] = useState<MatchSubmitDebug | null>(null);
   const [lastTeamToggleDebug, setLastTeamToggleDebug] = useState<TeamToggleDebug | null>(null);
   const [apiDiagnostics, setApiDiagnostics] = useState<ApiDiagnostics | null>(null);
@@ -327,6 +330,25 @@ function AdminPage() {
   };
 
   const formatLeagueDates = (league: Pick<League, "startDate" | "endDate">) => `${league.startDate} to ${league.endDate}`;
+
+  const matchDateOptions = useMemo(() => {
+    const uniqueDates = new Set(matches.map((match) => match.date));
+    return Array.from(uniqueDates).sort((a, b) => b.localeCompare(a));
+  }, [matches]);
+
+  const filteredMatches = useMemo(() => {
+    return matches.filter((match) => {
+      const matchesTeam = !matchTeamFilterId
+        || match.teamAId === matchTeamFilterId
+        || match.teamBId === matchTeamFilterId;
+      const matchesPlayer = !matchPlayerFilterId
+        || match.teamAPlayers.includes(matchPlayerFilterId)
+        || match.teamBPlayers.includes(matchPlayerFilterId);
+      const matchesDate = !matchDateFilter || match.date === matchDateFilter;
+
+      return matchesTeam && matchesPlayer && matchesDate;
+    });
+  }, [matches, matchTeamFilterId, matchPlayerFilterId, matchDateFilter]);
 
   const leagueNameById = useMemo(
     () => new Map(leagues.map((l) => [l.id, l.name])),
@@ -1325,11 +1347,48 @@ function AdminPage() {
             <p>Edit or delete existing matches.</p>
           </div>
           {renderWidgetMessage("matches")}
+          <div className="match-form" style={{ marginBottom: "0.75rem" }}>
+            <div className="teams-grid">
+              <label>
+                Filter by Team
+                <select value={matchTeamFilterId} onChange={(e) => setMatchTeamFilterId(e.target.value)}>
+                  <option value="">All teams</option>
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Filter by Player
+                <select value={matchPlayerFilterId} onChange={(e) => setMatchPlayerFilterId(e.target.value)}>
+                  <option value="">All players</option>
+                  {players.map((player) => (
+                    <option key={player.id} value={player.id}>
+                      {player.firstName} {player.lastName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Filter by Date
+                <select value={matchDateFilter} onChange={(e) => setMatchDateFilter(e.target.value)}>
+                  <option value="">All dates</option>
+                  {matchDateOptions.map((date) => (
+                    <option key={date} value={date}>
+                      {date}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
           {editingMatchId ? (
             <p className="status-msg">Currently editing a match — scroll up to the Record Match form to save or cancel.</p>
           ) : null}
           <ul className="entity-list">
-            {matches.map((match) => (
+            {filteredMatches.map((match) => (
               <li key={match.id}>
                 <span>
                   {match.date} - {match.teamAName} ({match.scoreA}) vs {match.teamBName} ({match.scoreB}) - {match.gameType}, {match.scoringType}, {match.courtName || "No court"}
@@ -1344,6 +1403,11 @@ function AdminPage() {
                 </div>
               </li>
             ))}
+            {filteredMatches.length === 0 ? (
+              <li>
+                <span>No matches found for the selected filters.</span>
+              </li>
+            ) : null}
           </ul>
         </article>
 
