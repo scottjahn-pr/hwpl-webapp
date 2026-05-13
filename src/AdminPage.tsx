@@ -125,6 +125,24 @@ interface WidgetMessage {
   isError: boolean;
 }
 
+interface TeamToggleDebug {
+  timestamp: string;
+  endpoint: string;
+  teamId: string;
+  previousIsActive: boolean;
+  payload: {
+    name: string;
+    isActive: boolean;
+  };
+  response?: {
+    status: number;
+    ok: boolean;
+    rawBody: string;
+    parsedBody: unknown;
+  };
+  error?: string;
+}
+
 const emptyPlayerForm: PlayerForm = {
   firstName: "",
   lastName: "",
@@ -205,6 +223,7 @@ function AdminPage() {
   const [matchSuccess, setMatchSuccess] = useState("");
   const [isSavingMatch, setIsSavingMatch] = useState(false);
   const [lastMatchSubmitDebug, setLastMatchSubmitDebug] = useState<MatchSubmitDebug | null>(null);
+  const [lastTeamToggleDebug, setLastTeamToggleDebug] = useState<TeamToggleDebug | null>(null);
   const [apiDiagnostics, setApiDiagnostics] = useState<ApiDiagnostics | null>(null);
   const [widgetMessage, setWidgetMessage] = useState<WidgetMessage | null>(null);
   const [csvDate, setCsvDate] = useState(new Date().toISOString().slice(0, 10));
@@ -614,20 +633,72 @@ function AdminPage() {
   };
 
   const onToggleTeamActive = async (team: Team) => {
+    const endpoint = `${adminApiBase}/teams/${team.id}`;
+    const payload = {
+      name: team.name,
+      isActive: !team.isActive
+    };
+
+    setLastTeamToggleDebug({
+      timestamp: new Date().toISOString(),
+      endpoint,
+      teamId: team.id,
+      previousIsActive: team.isActive,
+      payload
+    });
+
     try {
-      const res = await authFetch(`${adminApiBase}/teams/${team.id}`, {
+      const res = await authFetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: team.name,
-          isActive: !team.isActive
-        })
+        body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error("failed");
+
+      const raw = await res.text().catch(() => "");
+      let parsed: unknown = null;
+      if (raw) {
+        try {
+          parsed = JSON.parse(raw) as unknown;
+        } catch {
+          parsed = null;
+        }
+      }
+
+      setLastTeamToggleDebug((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          response: {
+            status: res.status,
+            ok: res.ok,
+            rawBody: raw,
+            parsedBody: parsed
+          }
+        };
+      });
+
+      if (!res.ok) {
+        const parsedObject = typeof parsed === "object" && parsed !== null
+          ? (parsed as { message?: string; error?: string; traceId?: string })
+          : null;
+        const normalizedRaw = raw.trim();
+        const fallbackText = normalizedRaw && !normalizedRaw.startsWith("<") ? normalizedRaw : "";
+        const statusText = [res.status, res.statusText].filter(Boolean).join(" ");
+        const fallbackMessage = fallbackText || `Error updating team status (HTTP ${statusText || res.status}).`;
+        const trace = parsedObject?.traceId ? ` (trace: ${parsedObject.traceId})` : "";
+        showWidgetMessage("teams", (parsedObject?.error || parsedObject?.message || fallbackMessage) + trace, true);
+        return;
+      }
+
       showWidgetMessage("teams", team.isActive ? "Team deactivated." : "Team activated.");
       await loadAdminData();
-    } catch {
-      showWidgetMessage("teams", "Error updating team status.", true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setLastTeamToggleDebug((prev) => {
+        if (!prev) return prev;
+        return { ...prev, error: message };
+      });
+      showWidgetMessage("teams", `Error updating team status: ${message}`, true);
     }
   };
 
@@ -1348,6 +1419,12 @@ function AdminPage() {
             <p>Add, activate/deactivate, or modify team records.</p>
           </div>
           {renderWidgetMessage("teams")}
+          {lastTeamToggleDebug ? (
+            <details style={{ marginBottom: "0.75rem" }}>
+              <summary>Team Toggle Debug (last attempt)</summary>
+              <pre className="auth-debug" style={{ marginTop: "0.5rem" }}>{JSON.stringify(lastTeamToggleDebug, null, 2)}</pre>
+            </details>
+          ) : null}
           <form className="match-form" onSubmit={onSaveTeam}>
             <label>
               Team Name

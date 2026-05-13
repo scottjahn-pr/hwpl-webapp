@@ -13,7 +13,19 @@ const requireAdmin = (request) => {
 };
 
 const createTraceId = () => `match-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-const apiDiagnosticsVersion = "2026-05-12-d09cd75-debug2";
+const apiDiagnosticsVersion = "2026-05-12-team-debug-v1";
+
+const getRouteId = (request, context) => {
+  const idFromContext = context?.bindingData?.id;
+  const idFromParamsObject = request?.params && typeof request.params === "object"
+    ? request.params.id
+    : undefined;
+  const idFromParamsMap = request?.params && typeof request.params.get === "function"
+    ? request.params.get("id")
+    : undefined;
+
+  return idFromContext || idFromParamsObject || idFromParamsMap || null;
+};
 
 app.http("adminDiagnostics", {
   methods: ["GET"],
@@ -284,6 +296,8 @@ const handleAdminTeams = async (request, id) => {
   const authError = requireAdmin(request);
   if (authError) return authError;
 
+  let payloadForDebug = null;
+
   try {
     if (request.method === "GET") {
       const result = await runQuery(`
@@ -304,6 +318,7 @@ const handleAdminTeams = async (request, id) => {
 
     const payload = await parseJson(request);
     if (!payload) return badRequest("Invalid JSON body.");
+    payloadForDebug = payload;
 
     const pool = await getPool();
     const tx = new sql.Transaction(pool);
@@ -325,7 +340,11 @@ const handleAdminTeams = async (request, id) => {
         await tx.commit();
         return json({ id: teamId }, 201);
       } catch (error) {
-        await tx.rollback();
+        try {
+          await tx.rollback();
+        } catch {
+          // Ignore rollback failure so we can return the original error details.
+        }
         throw error;
       }
     }
@@ -354,7 +373,11 @@ const handleAdminTeams = async (request, id) => {
         await tx.commit();
         return json({ updated: true });
       } catch (error) {
-        await tx.rollback();
+        try {
+          await tx.rollback();
+        } catch {
+          // Ignore rollback failure so we can return the original error details.
+        }
         throw error;
       }
     }
@@ -362,7 +385,45 @@ const handleAdminTeams = async (request, id) => {
     await runQuery("UPDATE teams SET is_active = 0 WHERE id = @id;", [{ name: "id", type: sql.UniqueIdentifier, value: id }]);
     return json({ deactivated: true });
   } catch (error) {
-    return serverError(error.message);
+    const traceId = createTraceId();
+    const message = error instanceof Error ? error.message : String(error);
+    const sqlError = (typeof error === "object" && error !== null) ? error : {};
+
+    console.error("handleAdminTeams failed", {
+      traceId,
+      id,
+      method: request.method,
+      url: request.url,
+      message,
+      code: sqlError.code,
+      number: sqlError.number,
+      state: sqlError.state,
+      class: sqlError.class,
+      lineNumber: sqlError.lineNumber,
+      payload: payloadForDebug
+    });
+
+    return json(
+      {
+        error: message,
+        message,
+        traceId,
+        debug: {
+          id,
+          method: request.method,
+          url: request.url,
+          payload: payloadForDebug,
+          sql: {
+            code: sqlError.code ?? null,
+            number: sqlError.number ?? null,
+            state: sqlError.state ?? null,
+            class: sqlError.class ?? null,
+            lineNumber: sqlError.lineNumber ?? null
+          }
+        }
+      },
+      409
+    );
   }
 };
 
@@ -472,7 +533,7 @@ app.http("adminPlayersCollection", {
 app.http("adminPlayersItem", {
   methods: ["PUT", "DELETE"],
   route: "ops/players/{id}",
-  handler: async (request, context) => handleAdminPlayers(request, context.bindingData.id)
+  handler: async (request, context) => handleAdminPlayers(request, getRouteId(request, context))
 });
 
 app.http("adminTeamsCollection", {
@@ -484,7 +545,7 @@ app.http("adminTeamsCollection", {
 app.http("adminTeamsItem", {
   methods: ["PUT", "DELETE"],
   route: "ops/teams/{id}",
-  handler: async (request, context) => handleAdminTeams(request, context.bindingData.id)
+  handler: async (request, context) => handleAdminTeams(request, getRouteId(request, context))
 });
 
 app.http("adminLeaguesCollection", {
@@ -496,7 +557,7 @@ app.http("adminLeaguesCollection", {
 app.http("adminLeaguesItem", {
   methods: ["PUT", "DELETE"],
   route: "ops/leagues/{id}",
-  handler: async (request, context) => handleAdminLeagues(request, context.bindingData.id)
+  handler: async (request, context) => handleAdminLeagues(request, getRouteId(request, context))
 });
 
 app.http("adminCourtsCollection", {
@@ -508,7 +569,7 @@ app.http("adminCourtsCollection", {
 app.http("adminCourtsItem", {
   methods: ["PUT", "DELETE"],
   route: "ops/courts/{id}",
-  handler: async (request, context) => handleAdminCourts(request, context.bindingData.id)
+  handler: async (request, context) => handleAdminCourts(request, getRouteId(request, context))
 });
 
 const saveMatch = async (payload, existingMatchId = null) => {
