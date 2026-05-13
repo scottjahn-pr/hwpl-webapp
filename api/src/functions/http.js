@@ -1195,7 +1195,9 @@ app.http("duprExportDates", {
       const result = await runQuery(`
         SELECT DISTINCT CONVERT(varchar(10), match_date, 120) AS matchDate
         FROM matches
-        WHERE game_type = 'Doubles'
+        WHERE game_type IN ('Doubles', 'Ladder')
+          AND score_a <> score_b
+          AND (score_a > 5 OR score_b > 5)
         ORDER BY matchDate DESC;
       `);
       return json(result.recordset.map((r) => r.matchDate));
@@ -1245,7 +1247,7 @@ app.http("duprExport", {
         JOIN players pb1 ON pb1.id = mpb1.player_id
         JOIN players pb2 ON pb2.id = mpb2.player_id
         WHERE m.match_date = @date
-          AND m.game_type = 'Doubles'
+          AND m.game_type IN ('Doubles', 'Ladder')
           AND m.score_a <> m.score_b
           AND (m.score_a > 5 OR m.score_b > 5)
         ORDER BY m.created_at;
