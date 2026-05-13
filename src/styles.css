@@ -393,6 +393,58 @@ button:hover {
   margin-bottom: 0.9rem;
 }
 
+.session-picker {
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.session-picker-select {
+  width: auto;
+  min-width: 180px;
+}
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 22, 38, 0.34);
+  backdrop-filter: blur(2px);
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+}
+
+.loading-overlay-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 1rem 1.1rem;
+  min-width: 220px;
+  text-align: center;
+  color: var(--ink);
+}
+
+.loading-overlay-card p {
+  margin: 0.35rem 0 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.loading-spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid rgba(16, 32, 64, 0.22);
+  border-top-color: var(--brand);
+  margin: 0 auto;
+  animation: spin 900ms linear infinite;
+}
+
 .admin-auth-links {
   display: flex;
   gap: 0.9rem;
@@ -492,6 +544,15 @@ button:hover {
   }
 }
 
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 980px) {
   .grid-layout {
     grid-template-columns: 1fr;
@@ -507,6 +568,10 @@ button:hover {
 
   .filter-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .session-picker {
+    flex-wrap: wrap;
   }
 }
 
@@ -541,5 +606,10 @@ button:hover {
   .club-logo {
     width: 60px;
     height: 60px;
+  }
+
+  .session-picker-select {
+    width: 100%;
+    min-width: 0;
   }
 }

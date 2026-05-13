@@ -95,10 +95,13 @@ const PlayerLink = ({ id, name }: { id: string; name: string }) => (
   <a className="entity-link" href={getPlayerRoute(id)}>{name}</a>
 );
 
-const getMatchPlayerNamesForTeam = (match: PublicMatch, teamId: string): string[] => (
-  match.participants
-    .filter((participant) => participant.teamId === teamId)
-    .sort((a, b) => a.participantOrder - b.participantOrder)
+const getAllMatchPlayerNames = (match: PublicMatch): string[] => (
+  [...match.participants]
+    .sort((a, b) => {
+      const sideDelta = (a.teamSide === "A" ? 0 : 1) - (b.teamSide === "A" ? 0 : 1);
+      if (sideDelta !== 0) return sideDelta;
+      return a.participantOrder - b.participantOrder;
+    })
     .map((participant) => participant.playerName)
 );
 
@@ -114,6 +117,14 @@ const getPlayerTeamKeyAndLabel = (match: PublicMatch, playerId: string) => {
   if (match.gameType === "Ladder") return { key: "ladder", label: "Ladder" };
   if (side === "A") return { key: match.teamAId ?? "", label: match.teamAName };
   return { key: match.teamBId ?? "", label: match.teamBName };
+};
+
+const getOpponentTeamForPlayer = (match: PublicMatch, playerId: string) => {
+  const side = getPlayerSideForMatch(match, playerId);
+  if (!side) return { id: null, name: "" };
+  if (match.gameType === "Ladder") return { id: null, name: "Ladder" };
+  if (side === "A") return { id: match.teamBId, name: match.teamBName };
+  return { id: match.teamAId, name: match.teamAName };
 };
 
 const TeamDetailView = ({
@@ -233,7 +244,12 @@ const TeamDetailView = ({
         opponentId: item.opponentId,
         row: toStatsRow(item.opponentId, item.opponentName, item.acc)
       }))
-      .sort((a, b) => b.row.gamesPlayed - a.row.gamesPlayed || byLeagueDesc(a, b));
+      .sort((a, b) => (
+        b.row.gamesPlayed - a.row.gamesPlayed
+        || b.row.differential - a.row.differential
+        || a.row.name.localeCompare(b.row.name)
+        || byLeagueDesc(a, b)
+      ));
   }, [teamMatches, teamId]);
 
   const leagueOptions = useMemo(() => {
@@ -404,6 +420,7 @@ const TeamDetailView = ({
                   <th>Win %</th>
                   <th>PF</th>
                   <th>PA</th>
+                  <th>Diff</th>
                 </tr>
               </thead>
               <tbody>
@@ -417,6 +434,7 @@ const TeamDetailView = ({
                     <td>{(entry.row.winRate * 100).toFixed(0)}%</td>
                     <td>{entry.row.pointsFor}</td>
                     <td>{entry.row.pointsAgainst}</td>
+                    <td>{entry.row.differential}</td>
                   </tr>
                 ))}
               </tbody>
@@ -482,14 +500,14 @@ const TeamDetailView = ({
                 <th>Court</th>
                 <th>Team Played</th>
                 <th>Score</th>
-                <th>Players</th>
+                <th>Players (All 4)</th>
               </tr>
             </thead>
             <tbody>
               {filteredMatches.map((match) => {
                 const opponentId = match.teamAId === teamId ? match.teamBId : match.teamAId;
                 const opponentName = match.teamAId === teamId ? match.teamBName : match.teamAName;
-                const players = getMatchPlayerNamesForTeam(match, teamId);
+                const players = getAllMatchPlayerNames(match);
                 const scoreText = match.teamAId === teamId
                   ? `${match.scoreA}-${match.scoreB}`
                   : `${match.scoreB}-${match.scoreA}`;
@@ -631,7 +649,12 @@ const PlayerDetailView = ({
         opponentId: item.opponentId,
         row: toStatsRow(item.opponentId, item.opponentName, item.acc)
       }))
-      .sort((a, b) => b.row.gamesPlayed - a.row.gamesPlayed || byLeagueDesc(a, b));
+      .sort((a, b) => (
+        b.row.gamesPlayed - a.row.gamesPlayed
+        || b.row.differential - a.row.differential
+        || a.row.name.localeCompare(b.row.name)
+        || byLeagueDesc(a, b)
+      ));
   }, [playerId, playerMatches]);
 
   const leagueOptions = useMemo(() => {
@@ -738,7 +761,7 @@ const PlayerDetailView = ({
                   </tr>
                   {league.teams.map((team) => (
                     <tr key={`${league.leagueId}-${team.key}`}>
-                      <td>{team.label}</td>
+                      <td>{team.key === "ladder" ? team.label : <TeamLink id={team.key} name={team.label} />}</td>
                       <td>{team.overall.gamesPlayed}</td>
                       <td>{team.overall.wins}</td>
                       <td>{team.overall.losses}</td>
@@ -754,7 +777,7 @@ const PlayerDetailView = ({
 
             {league.teams.map((team) => (
               <div key={`${league.leagueId}-${team.key}-courts`} className="detail-subblock">
-                <p>{team.label} by Court</p>
+                <p>{team.key === "ladder" ? team.label : <TeamLink id={team.key} name={team.label} />} by Court</p>
                 <div className="table-wrap">
                   <table>
                     <thead>
@@ -808,6 +831,7 @@ const PlayerDetailView = ({
                 <th>Win %</th>
                 <th>PF</th>
                 <th>PA</th>
+                <th>Diff</th>
               </tr>
             </thead>
             <tbody>
@@ -821,6 +845,7 @@ const PlayerDetailView = ({
                   <td>{(entry.row.winRate * 100).toFixed(0)}%</td>
                   <td>{entry.row.pointsFor}</td>
                   <td>{entry.row.pointsAgainst}</td>
+                  <td>{entry.row.differential}</td>
                 </tr>
               ))}
             </tbody>
@@ -884,6 +909,7 @@ const PlayerDetailView = ({
                 <th>League</th>
                 <th>Court</th>
                 <th>Team</th>
+                <th>vs Team</th>
                 <th>Score</th>
                 <th>Players</th>
               </tr>
@@ -892,6 +918,7 @@ const PlayerDetailView = ({
               {filteredMatches.map((match) => {
                 const side = getPlayerSideForMatch(match, playerId);
                 const teamMeta = getPlayerTeamKeyAndLabel(match, playerId);
+                const opponentTeam = getOpponentTeamForPlayer(match, playerId);
                 const scoreText = side === "A" ? `${match.scoreA}-${match.scoreB}` : `${match.scoreB}-${match.scoreA}`;
                 const playerNames = match.participants.map((participant) => participant.playerName).join(", ");
 
@@ -900,7 +927,8 @@ const PlayerDetailView = ({
                     <td>{match.date}</td>
                     <td>{match.leagueName}</td>
                     <td>{match.courtName}</td>
-                    <td>{teamMeta.label}</td>
+                    <td>{teamMeta.key === "ladder" ? teamMeta.label : <TeamLink id={teamMeta.key} name={teamMeta.label} />}</td>
+                    <td>{opponentTeam.id ? <TeamLink id={opponentTeam.id} name={opponentTeam.name} /> : opponentTeam.name}</td>
                     <td>{scoreText}</td>
                     <td>{playerNames}</td>
                   </tr>
@@ -1008,6 +1036,7 @@ function App() {
   const playerPathMatch = path.match(/^\/player\/([^/]+)$/i);
   const teamRouteId = teamPathMatch ? decodePathSegment(teamPathMatch[1]) : "";
   const playerRouteId = playerPathMatch ? decodePathSegment(playerPathMatch[1]) : "";
+  const showLoadingOverlay = loading || sessionLoading;
 
   return (
     <main className="app-shell">
@@ -1138,10 +1167,11 @@ function App() {
             </div>
             {sessionDates.length > 0 ? (
               <>
-                <div style={{ marginBottom: "1rem" }}>
-                  <label htmlFor="session-date-select" style={{ marginRight: "0.5rem", fontWeight: 600 }}>Session date:</label>
+                <div className="session-picker">
+                  <span>Session date:</span>
                   <select
                     id="session-date-select"
+                    className="session-picker-select"
                     value={selectedDate}
                     onChange={(event) => setSelectedDate(event.target.value)}
                   >
@@ -1266,6 +1296,15 @@ function App() {
           </footer>
         </>
       )}
+
+      {showLoadingOverlay ? (
+        <div className="loading-overlay" role="status" aria-live="polite" aria-busy="true">
+          <div className="loading-overlay-card">
+            <div className="loading-spinner" />
+            <p>Loading latest league stats...</p>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
