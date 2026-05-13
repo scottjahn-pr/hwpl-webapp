@@ -279,6 +279,7 @@ app.http("statsPlayers", {
           (points_for - points_against) AS differential,
           CASE WHEN games_played = 0 THEN 0 ELSE CAST(wins AS float) / games_played END AS winRate
         FROM player_games
+        WHERE games_played > 0
         ORDER BY wins DESC, winRate DESC, differential DESC;
       `);
 
@@ -319,6 +320,7 @@ app.http("statsTeams", {
         FROM teams t
         LEFT JOIN all_games g ON g.team_id = t.id
         GROUP BY t.id, t.name
+        HAVING COUNT(g.team_id) > 0
         ORDER BY wins DESC, winRate DESC, differential DESC;
       `);
 
