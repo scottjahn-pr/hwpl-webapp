@@ -72,7 +72,7 @@ function App() {
             <h1>League Statistics Portal</h1>
           </div>
         </div>
-        <p>View live league, team, player, and recent match statistics powered by the Azure backend.</p>
+        <p>View live league, team, player, and recent match statistics.</p>
 
         {apiError ? <p className="panel status-msg" style={{ color: "#9a2f2f" }}>{apiError}</p> : null}
 
