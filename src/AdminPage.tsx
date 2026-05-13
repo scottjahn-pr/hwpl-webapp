@@ -215,8 +215,8 @@ function AdminPage() {
     teamAPlayer2: "",
     teamBPlayer1: "",
     teamBPlayer2: "",
-    scoreA: "11",
-    scoreB: "8"
+    scoreA: "",
+    scoreB: ""
   });
 
   const [matchError, setMatchError] = useState("");
@@ -766,7 +766,7 @@ function AdminPage() {
 
   const onCancelMatchEdit = () => {
     setEditingMatchId(null);
-    setMatchForm((prev) => ({ ...prev, scoreA: "11", scoreB: "8" }));
+    setMatchForm((prev) => ({ ...prev, scoreA: "", scoreB: "" }));
   };
 
   const onDeleteMatch = async (matchId: string) => {
@@ -919,8 +919,8 @@ function AdminPage() {
         teamAPlayer2: "",
         teamBPlayer1: "",
         teamBPlayer2: "",
-        scoreA: "11",
-        scoreB: "8"
+        scoreA: "",
+        scoreB: ""
       });
       setTimeout(() => {
         window.scrollTo({ top: 0, behavior: "smooth" });
