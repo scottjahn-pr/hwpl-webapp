@@ -229,7 +229,8 @@ function AdminPage() {
   const [lastTeamToggleDebug, setLastTeamToggleDebug] = useState<TeamToggleDebug | null>(null);
   const [apiDiagnostics, setApiDiagnostics] = useState<ApiDiagnostics | null>(null);
   const [widgetMessage, setWidgetMessage] = useState<WidgetMessage | null>(null);
-  const [csvDate, setCsvDate] = useState(new Date().toISOString().slice(0, 10));
+  const [csvDate, setCsvDate] = useState("");
+  const [matchDates, setMatchDates] = useState<string[]>([]);
   const [adminApiBase, setAdminApiBase] = useState("/api/ops");
 
   const showWidgetMessage = useCallback((scope: WidgetScope, text: string, isError = false) => {
@@ -494,6 +495,17 @@ function AdminPage() {
       leagueId: prev.leagueId || activeLoadedLeagues[0]?.id || "",
       courtId: prev.courtId || activeLoadedCourts[0]?.id || ""
     }));
+
+    try {
+      const datesRes = await authFetch("/api/exports/dupr/dates");
+      if (datesRes.ok) {
+        const dates: string[] = await datesRes.json();
+        setMatchDates(dates);
+        setCsvDate((prev) => prev || dates[0] || "");
+      }
+    } catch {
+      // Non-critical — widget will fall back to empty list
+    }
   }, [adminApiBase]);
 
   const checkAuthorization = useCallback(async () => {
@@ -1333,9 +1345,18 @@ function AdminPage() {
           <div className="match-form">
             <label>
               Export Date
-              <input type="date" value={csvDate} onChange={(e) => setCsvDate(e.target.value)} />
+              {matchDates.length > 0 ? (
+                <select value={csvDate} onChange={(e) => setCsvDate(e.target.value)}>
+                  <option value="">Select a date…</option>
+                  {matchDates.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              ) : (
+                <input type="date" value={csvDate} onChange={(e) => setCsvDate(e.target.value)} />
+              )}
             </label>
-            <button type="button" onClick={exportMatchesForDay}>
+            <button type="button" onClick={exportMatchesForDay} disabled={!csvDate}>
               Export CSV
             </button>
           </div>

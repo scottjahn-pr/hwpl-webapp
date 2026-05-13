@@ -1184,6 +1184,27 @@ app.http("adminMatchesItem", {
   }
 });
 
+app.http("duprExportDates", {
+  methods: ["GET"],
+  route: "exports/dupr/dates",
+  handler: async (request) => {
+    const authError = requireAdmin(request);
+    if (authError) return authError;
+
+    try {
+      const result = await runQuery(`
+        SELECT DISTINCT CONVERT(varchar(10), match_date, 120) AS matchDate
+        FROM matches
+        WHERE game_type = 'Doubles'
+        ORDER BY matchDate DESC;
+      `);
+      return json(result.recordset.map((r) => r.matchDate));
+    } catch (error) {
+      return serverError(error.message);
+    }
+  }
+});
+
 app.http("duprExport", {
   methods: ["GET"],
   route: "exports/dupr",
@@ -1198,21 +1219,23 @@ app.http("duprExport", {
       const result = await runQuery(
         `
         SELECT
-          m.match_date AS matchDate,
-          l.name + ' (' + CONVERT(varchar(10), l.start_date, 120) + ')' AS league,
-          ta.name AS teamA,
-          pa1.first_name + ' ' + pa1.last_name AS teamAPlayer1,
-          pa2.first_name + ' ' + pa2.last_name AS teamAPlayer2,
+          CONVERT(varchar(10), m.match_date, 120) AS matchDate,
+          l.name AS leagueName,
+          COALESCE(c.name, 'Unassigned Court') AS courtName,
+          m.scoring_type AS scoringType,
           m.score_a AS scoreA,
-          tb.name AS teamB,
-          pb1.first_name + ' ' + pb1.last_name AS teamBPlayer1,
-          pb2.first_name + ' ' + pb2.last_name AS teamBPlayer2,
           m.score_b AS scoreB,
-          CASE WHEN m.score_a > m.score_b THEN ta.name ELSE tb.name END AS winnerTeam
+          pa1.first_name + ' ' + pa1.last_name AS playerA1Name,
+          pa1.dupr_id AS playerA1DuprId,
+          pa2.first_name + ' ' + pa2.last_name AS playerA2Name,
+          pa2.dupr_id AS playerA2DuprId,
+          pb1.first_name + ' ' + pb1.last_name AS playerB1Name,
+          pb1.dupr_id AS playerB1DuprId,
+          pb2.first_name + ' ' + pb2.last_name AS playerB2Name,
+          pb2.dupr_id AS playerB2DuprId
         FROM matches m
         JOIN leagues l ON l.id = m.league_id
-        JOIN teams ta ON ta.id = m.team_a_id
-        JOIN teams tb ON tb.id = m.team_b_id
+        LEFT JOIN courts c ON c.id = m.court_id
         JOIN match_participants mpa1 ON mpa1.match_id = m.id AND mpa1.team_side = 'A' AND mpa1.participant_order = 1
         JOIN match_participants mpa2 ON mpa2.match_id = m.id AND mpa2.team_side = 'A' AND mpa2.participant_order = 2
         JOIN match_participants mpb1 ON mpb1.match_id = m.id AND mpb1.team_side = 'B' AND mpb1.participant_order = 1
@@ -1223,37 +1246,42 @@ app.http("duprExport", {
         JOIN players pb2 ON pb2.id = mpb2.player_id
         WHERE m.match_date = @date
           AND m.game_type = 'Doubles'
-        ORDER BY m.match_date, m.created_at;
+          AND m.score_a <> m.score_b
+          AND (m.score_a > 5 OR m.score_b > 5)
+        ORDER BY m.created_at;
       `,
         [{ name: "date", type: sql.Date, value: date }]
       );
 
+      if (result.recordset.length === 0) {
+        return badRequest(`No eligible matches found for ${date}.`);
+      }
+
       const header = [
-        "match_date",
-        "league",
-        "team_a",
-        "team_a_player_1",
-        "team_a_player_2",
-        "team_a_score",
-        "team_b",
-        "team_b_player_1",
-        "team_b_player_2",
-        "team_b_score",
-        "winner_team"
+        "matchType", "scoreType", "event",
+        "date",
+        "playerA1", "playerA1DuprId",
+        "playerA2", "playerA2DuprId",
+        "playerB1", "playerB1DuprId",
+        "playerB2", "playerB2DuprId",
+        "teamAGame1", "teamBGame1",
+        "teamAGame2", "teamBGame2",
+        "teamAGame3", "teamBGame3",
+        "teamAGame4", "teamBGame4",
+        "teamAGame5", "teamBGame5"
       ];
 
       const rows = result.recordset.map((row) => [
+        "D",
+        row.scoringType.toUpperCase(),
+        `${row.leagueName} - ${row.matchDate} - ${row.courtName}`,
         row.matchDate,
-        row.league,
-        row.teamA,
-        row.teamAPlayer1,
-        row.teamAPlayer2,
-        row.scoreA,
-        row.teamB,
-        row.teamBPlayer1,
-        row.teamBPlayer2,
-        row.scoreB,
-        row.winnerTeam
+        row.playerA1Name, row.playerA1DuprId,
+        row.playerA2Name, row.playerA2DuprId,
+        row.playerB1Name, row.playerB1DuprId,
+        row.playerB2Name, row.playerB2DuprId,
+        row.scoreA, row.scoreB,
+        "", "", "", "", "", "", "", ""
       ]);
 
       return csv(toCsv(header, rows), `hwpl-dupr-export-${date}.csv`);
