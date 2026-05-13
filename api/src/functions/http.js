@@ -340,14 +340,16 @@ const handleAdminTeams = async (request, id) => {
         teamReq.input("name", sql.NVarChar(120), payload.name);
         teamReq.input("isActive", sql.Bit, payload.isActive ?? true);
         await teamReq.query("UPDATE teams SET name = @name, is_active = @isActive WHERE id = @id;");
-        const deleteReq = new sql.Request(tx);
-        deleteReq.input("teamId", sql.UniqueIdentifier, id);
-        await deleteReq.query("DELETE FROM team_leagues WHERE team_id = @teamId;");
-        for (const leagueId of (payload.leagueIds ?? [])) {
-          const tlReq = new sql.Request(tx);
-          tlReq.input("teamId", sql.UniqueIdentifier, id);
-          tlReq.input("leagueId", sql.UniqueIdentifier, leagueId);
-          await tlReq.query("INSERT INTO team_leagues (team_id, league_id) VALUES (@teamId, @leagueId);");
+        if (Array.isArray(payload.leagueIds)) {
+          const deleteReq = new sql.Request(tx);
+          deleteReq.input("teamId", sql.UniqueIdentifier, id);
+          await deleteReq.query("DELETE FROM team_leagues WHERE team_id = @teamId;");
+          for (const leagueId of payload.leagueIds) {
+            const tlReq = new sql.Request(tx);
+            tlReq.input("teamId", sql.UniqueIdentifier, id);
+            tlReq.input("leagueId", sql.UniqueIdentifier, leagueId);
+            await tlReq.query("INSERT INTO team_leagues (team_id, league_id) VALUES (@teamId, @leagueId);");
+          }
         }
         await tx.commit();
         return json({ updated: true });

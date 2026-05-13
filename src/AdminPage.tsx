@@ -117,6 +117,14 @@ interface ApiDiagnostics {
   timestamp: string;
 }
 
+type WidgetScope = "global" | "match" | "export" | "matches" | "players" | "teams" | "leagues" | "courts";
+
+interface WidgetMessage {
+  scope: WidgetScope;
+  text: string;
+  isError: boolean;
+}
+
 const emptyPlayerForm: PlayerForm = {
   firstName: "",
   lastName: "",
@@ -198,9 +206,28 @@ function AdminPage() {
   const [isSavingMatch, setIsSavingMatch] = useState(false);
   const [lastMatchSubmitDebug, setLastMatchSubmitDebug] = useState<MatchSubmitDebug | null>(null);
   const [apiDiagnostics, setApiDiagnostics] = useState<ApiDiagnostics | null>(null);
-  const [adminMessage, setAdminMessage] = useState("");
+  const [widgetMessage, setWidgetMessage] = useState<WidgetMessage | null>(null);
   const [csvDate, setCsvDate] = useState(new Date().toISOString().slice(0, 10));
   const [adminApiBase, setAdminApiBase] = useState("/api/ops");
+
+  const showWidgetMessage = useCallback((scope: WidgetScope, text: string, isError = false) => {
+    setWidgetMessage({ scope, text, isError });
+  }, []);
+
+  const renderWidgetMessage = (scope: WidgetScope) => {
+    if (!widgetMessage || widgetMessage.scope !== scope) {
+      return null;
+    }
+
+    return (
+      <p
+        className={widgetMessage.isError ? "form-error" : "status-msg"}
+        style={{ fontSize: "1rem", padding: "0.75rem", marginBottom: "0.5rem" }}
+      >
+        {widgetMessage.text}
+      </p>
+    );
+  };
 
   useEffect(() => { editingTeamIdRef.current = editingTeamId; }, [editingTeamId]);
 
@@ -379,13 +406,13 @@ function AdminPage() {
 
     if ([lRes, cRes, tRes, pRes, mRes].some((res) => res.status === 401 || res.status === 403)) {
       const statusSummary = `leagues=${lRes.status}, courts=${cRes.status}, teams=${tRes.status}, players=${pRes.status}, matches=${mRes.status}`;
-      setAdminMessage(`Signed in as admin, but one or more admin data endpoints were denied (${statusSummary}) via ${base}.`);
+      showWidgetMessage("global", `Signed in as admin, but one or more admin data endpoints were denied (${statusSummary}) via ${base}.`, true);
       return;
     }
 
     if (!lRes.ok || !cRes.ok || !tRes.ok || !pRes.ok || !mRes.ok) {
       const statusSummary = `leagues=${lRes.status}, courts=${cRes.status}, teams=${tRes.status}, players=${pRes.status}, matches=${mRes.status}`;
-      setAdminMessage(`Signed in as admin, but failed to load admin data (${statusSummary}) via ${base}.`);
+      showWidgetMessage("global", `Signed in as admin, but failed to load admin data (${statusSummary}) via ${base}.`, true);
       return;
     }
 
@@ -462,11 +489,11 @@ function AdminPage() {
     } catch (error) {
       setIsAuthorized(false);
       setAuthMessage("Could not validate admin session. Try refreshing.");
-      setAdminMessage(error instanceof Error ? error.message : "Failed to validate admin session.");
+      showWidgetMessage("global", error instanceof Error ? error.message : "Failed to validate admin session.", true);
     } finally {
       setAuthLoading(false);
     }
-  }, [loadAdminData, loadAuthDebug, loadSignedInObjectId]);
+  }, [loadAdminData, loadAuthDebug, loadSignedInObjectId, showWidgetMessage]);
 
   useEffect(() => {
     checkAuthorization();
@@ -492,12 +519,12 @@ function AdminPage() {
         body: JSON.stringify(playerForm)
       });
       if (!res.ok) throw new Error("failed");
-      setAdminMessage(editingPlayerId ? "Player updated." : "Player added.");
+      showWidgetMessage("players", editingPlayerId ? "Player updated." : "Player added.");
       setEditingPlayerId(null);
       setPlayerForm({ ...emptyPlayerForm });
       await loadAdminData();
     } catch {
-      setAdminMessage("Error saving player.");
+      showWidgetMessage("players", "Error saving player.", true);
     }
   };
 
@@ -510,24 +537,24 @@ function AdminPage() {
         body: JSON.stringify(teamForm)
       });
       if (!res.ok) throw new Error("failed");
-      setAdminMessage(editingTeamId ? "Team updated." : "Team added.");
+      showWidgetMessage("teams", editingTeamId ? "Team updated." : "Team added.");
       setEditingTeamId(null);
       setTeamForm({ ...emptyTeamForm });
       await loadAdminData();
     } catch {
-      setAdminMessage("Error saving team.");
+      showWidgetMessage("teams", "Error saving team.", true);
     }
   };
 
   const onSaveLeague = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!leagueForm.endDate) {
-      setAdminMessage("League end date is required.");
+      showWidgetMessage("leagues", "League end date is required.", true);
       return;
     }
 
     if (leagueForm.endDate < leagueForm.startDate) {
-      setAdminMessage("League end date cannot be before start date.");
+      showWidgetMessage("leagues", "League end date cannot be before start date.", true);
       return;
     }
 
@@ -538,12 +565,12 @@ function AdminPage() {
         body: JSON.stringify(leagueForm)
       });
       if (!res.ok) throw new Error("failed");
-      setAdminMessage(editingLeagueId ? "League updated." : "League added.");
+      showWidgetMessage("leagues", editingLeagueId ? "League updated." : "League added.");
       setEditingLeagueId(null);
       setLeagueForm({ ...emptyLeagueForm });
       await loadAdminData();
     } catch {
-      setAdminMessage("Error saving league.");
+      showWidgetMessage("leagues", "Error saving league.", true);
     }
   };
 
@@ -556,12 +583,12 @@ function AdminPage() {
         body: JSON.stringify(courtForm)
       });
       if (!res.ok) throw new Error("failed");
-      setAdminMessage(editingCourtId ? "Court updated." : "Court added.");
+      showWidgetMessage("courts", editingCourtId ? "Court updated." : "Court added.");
       setEditingCourtId(null);
       setCourtForm({ ...emptyCourtForm });
       await loadAdminData();
     } catch {
-      setAdminMessage("Error saving court.");
+      showWidgetMessage("courts", "Error saving court.", true);
     }
   };
 
@@ -579,10 +606,10 @@ function AdminPage() {
         })
       });
       if (!res.ok) throw new Error("failed");
-      setAdminMessage(player.isActive ? "Player deactivated." : "Player activated.");
+      showWidgetMessage("players", player.isActive ? "Player deactivated." : "Player activated.");
       await loadAdminData();
     } catch {
-      setAdminMessage("Error updating player status.");
+      showWidgetMessage("players", "Error updating player status.", true);
     }
   };
 
@@ -593,15 +620,14 @@ function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: team.name,
-          leagueIds: team.leagueIds,
           isActive: !team.isActive
         })
       });
       if (!res.ok) throw new Error("failed");
-      setAdminMessage(team.isActive ? "Team deactivated." : "Team activated.");
+      showWidgetMessage("teams", team.isActive ? "Team deactivated." : "Team activated.");
       await loadAdminData();
     } catch {
-      setAdminMessage("Error updating team status.");
+      showWidgetMessage("teams", "Error updating team status.", true);
     }
   };
 
@@ -618,10 +644,10 @@ function AdminPage() {
         })
       });
       if (!res.ok) throw new Error("failed");
-      setAdminMessage(league.isActive ? "League deactivated." : "League activated.");
+      showWidgetMessage("leagues", league.isActive ? "League deactivated." : "League activated.");
       await loadAdminData();
     } catch {
-      setAdminMessage("Error updating league status.");
+      showWidgetMessage("leagues", "Error updating league status.", true);
     }
   };
 
@@ -636,10 +662,10 @@ function AdminPage() {
         })
       });
       if (!res.ok) throw new Error("failed");
-      setAdminMessage(court.isActive ? "Court deactivated." : "Court activated.");
+      showWidgetMessage("courts", court.isActive ? "Court deactivated." : "Court activated.");
       await loadAdminData();
     } catch {
-      setAdminMessage("Error updating court status.");
+      showWidgetMessage("courts", "Error updating court status.", true);
     }
   };
 
@@ -679,10 +705,10 @@ function AdminPage() {
       if (editingMatchId === matchId) {
         setEditingMatchId(null);
       }
-      setAdminMessage("Match deleted.");
+      showWidgetMessage("matches", "Match deleted.");
       await loadAdminData();
     } catch {
-      setAdminMessage("Error deleting match.");
+      showWidgetMessage("matches", "Error deleting match.", true);
     }
   };
 
@@ -694,11 +720,9 @@ function AdminPage() {
     setIsSavingMatch(true);
     setMatchError("");
     setMatchSuccess("");
-    setAdminMessage("");
 
     const failMatchValidation = (message: string) => {
       setMatchError(message);
-      setAdminMessage(message);
       setIsSavingMatch(false);
       setTimeout(() => {
         matchFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -812,7 +836,6 @@ function AdminPage() {
       setEditingMatchId(null);
       const successMessage = wasEditing ? "✓ Match updated successfully." : "✓ Match result recorded.";
       setMatchSuccess(successMessage);
-      setAdminMessage(successMessage);
       setMatchForm({
         leagueId: matchForm.leagueId,
         courtId: matchForm.courtId,
@@ -843,7 +866,6 @@ function AdminPage() {
         };
       });
       setMatchError(networkMessage);
-      setAdminMessage(networkMessage);
       setTimeout(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, 50);
       setIsSavingMatch(false);
       return;
@@ -857,7 +879,7 @@ function AdminPage() {
           error: "Saved, but list refresh failed."
         };
       });
-      setAdminMessage((prev) => prev ? `${prev} (saved, but list refresh failed)` : "Saved, but list refresh failed.");
+      setMatchError("Saved, but list refresh failed.");
     });
     setLastMatchSubmitDebug((prev) => {
       if (!prev || prev.phase === "refresh-failed") return prev;
@@ -878,7 +900,7 @@ function AdminPage() {
     try {
       const res = await authFetch(`/api/exports/dupr?date=${csvDate}`);
       if (!res.ok) {
-        setAdminMessage("Export failed. No matches for that date, or server error.");
+        showWidgetMessage("export", "Export failed. No matches for that date, or server error.", true);
         return;
       }
       const blob = await res.blob();
@@ -888,9 +910,9 @@ function AdminPage() {
       link.download = `hwpl-dupr-export-${csvDate}.csv`;
       link.click();
       URL.revokeObjectURL(url);
-      setAdminMessage(`Export triggered for ${csvDate}.`);
+      showWidgetMessage("export", `Export triggered for ${csvDate}.`);
     } catch {
-      setAdminMessage("Export failed.");
+      showWidgetMessage("export", "Export failed.", true);
     }
   };
 
@@ -949,7 +971,7 @@ function AdminPage() {
         </div>
       </section>
 
-      {adminMessage ? <p className="panel status-msg">{adminMessage}</p> : null}
+      {renderWidgetMessage("global")}
 
       <section className="admin-grid">
         <article className="panel module-record-match" ref={matchFormRef}>
@@ -957,6 +979,7 @@ function AdminPage() {
             <h3>{editingMatchId ? "Edit Match Result" : "Record Match Result"}</h3>
             <p>{editingMatchId ? "Update the fields below and press Update Match to save." : "Admins can add individual match outcomes."}</p>
           </div>
+          {renderWidgetMessage("match")}
           <form className="match-form" onSubmit={onRecordMatch} noValidate>
             {matchError ? <p className="form-error" style={{fontSize: "1rem", padding: "0.75rem", marginBottom: "0.5rem"}}>{matchError}</p> : null}
             {matchSuccess ? <p className="status-msg" style={{fontSize: "1rem", padding: "0.75rem", marginBottom: "0.5rem", background: "#d4edda", border: "1px solid #28a745", borderRadius: "4px"}}>{matchSuccess}</p> : null}
@@ -1213,6 +1236,7 @@ function AdminPage() {
             <h3>CSV Export for DUPR</h3>
             <p>Exports all matches for one day.</p>
           </div>
+          {renderWidgetMessage("export")}
           <div className="match-form">
             <label>
               Export Date
@@ -1229,6 +1253,7 @@ function AdminPage() {
             <h3>Manage Matches</h3>
             <p>Edit or delete existing matches.</p>
           </div>
+          {renderWidgetMessage("matches")}
           {editingMatchId ? (
             <p className="status-msg">Currently editing a match — scroll up to the Record Match form to save or cancel.</p>
           ) : null}
@@ -1256,6 +1281,7 @@ function AdminPage() {
             <h3>Manage Players</h3>
             <p>Add, activate/deactivate, or modify player records.</p>
           </div>
+          {renderWidgetMessage("players")}
           <form className="match-form" onSubmit={onSavePlayer}>
             <div className="teams-grid">
               <label>
@@ -1321,6 +1347,7 @@ function AdminPage() {
             <h3>Manage Teams</h3>
             <p>Add, activate/deactivate, or modify team records.</p>
           </div>
+          {renderWidgetMessage("teams")}
           <form className="match-form" onSubmit={onSaveTeam}>
             <label>
               Team Name
@@ -1380,6 +1407,7 @@ function AdminPage() {
             <h3>Manage Leagues</h3>
             <p>Add, activate/deactivate, or modify leagues.</p>
           </div>
+          {renderWidgetMessage("leagues")}
           <form className="match-form" onSubmit={onSaveLeague}>
             <label>
               League Name
@@ -1448,6 +1476,7 @@ function AdminPage() {
             <h3>Manage Courts</h3>
             <p>Add, activate/deactivate, or modify courts.</p>
           </div>
+          {renderWidgetMessage("courts")}
           <form className="match-form" onSubmit={onSaveCourt}>
             <label>
               Court Name
