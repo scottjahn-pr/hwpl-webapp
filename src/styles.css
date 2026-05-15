@@ -125,6 +125,11 @@ body {
   animation: rise-in 550ms ease-out both;
 }
 
+.panel:has(select) {
+  backdrop-filter: none;
+  background: rgba(255, 255, 255, 0.9);
+}
+
 .panel-header h3 {
   margin: 0;
   font-size: 1.1rem;
@@ -411,7 +416,6 @@ button:hover {
   position: fixed;
   inset: 0;
   background: rgba(12, 22, 38, 0.34);
-  backdrop-filter: blur(2px);
   z-index: 2000;
   display: grid;
   place-items: center;
