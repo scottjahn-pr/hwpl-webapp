@@ -346,9 +346,9 @@ const TeamDetailView = ({
                     <td>{league.overall.pointsAgainst}</td>
                     <td>{league.overall.differential}</td>
                   </tr>
-                  {league.courts.map((court, index) => (
+                  {league.courts.map((court) => (
                     <tr key={court.id}>
-                      <td>{index + 1}. {court.name}</td>
+                      <td>{court.name}</td>
                       <td>{court.gamesPlayed}</td>
                       <td>{court.wins}</td>
                       <td>{court.losses}</td>
@@ -1087,43 +1087,6 @@ function App() {
           <section className="grid-layout">
             <article className="panel">
               <div className="panel-header">
-                <h3>Player Stats</h3>
-                <p>Includes games from default and non-default teams.</p>
-              </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Player</th>
-                      <th>GP</th>
-                      <th>W</th>
-                      <th>L</th>
-                      <th>Win %</th>
-                      <th>PF</th>
-                      <th>PA</th>
-                      <th>Diff</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {playerStats.map((row) => (
-                      <tr key={row.id}>
-                        <td><PlayerLink id={row.id} name={row.name} /></td>
-                        <td>{row.gamesPlayed}</td>
-                        <td>{row.wins}</td>
-                        <td>{row.losses}</td>
-                        <td>{(row.winRate * 100).toFixed(0)}%</td>
-                        <td>{row.pointsFor}</td>
-                        <td>{row.pointsAgainst}</td>
-                        <td>{row.differential}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </article>
-
-            <article className="panel">
-              <div className="panel-header">
                 <h3>Team Stats</h3>
                 <p>Team totals include all matches where players represented that team.</p>
               </div>
@@ -1145,6 +1108,43 @@ function App() {
                     {teamStats.map((row) => (
                       <tr key={row.id}>
                         <td><TeamLink id={row.id} name={row.name} /></td>
+                        <td>{row.gamesPlayed}</td>
+                        <td>{row.wins}</td>
+                        <td>{row.losses}</td>
+                        <td>{(row.winRate * 100).toFixed(0)}%</td>
+                        <td>{row.pointsFor}</td>
+                        <td>{row.pointsAgainst}</td>
+                        <td>{row.differential}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+
+            <article className="panel">
+              <div className="panel-header">
+                <h3>Player Stats</h3>
+                <p>Includes games from default and non-default teams.</p>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Player</th>
+                      <th>GP</th>
+                      <th>W</th>
+                      <th>L</th>
+                      <th>Win %</th>
+                      <th>PF</th>
+                      <th>PA</th>
+                      <th>Diff</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {playerStats.map((row) => (
+                      <tr key={row.id}>
+                        <td><PlayerLink id={row.id} name={row.name} /></td>
                         <td>{row.gamesPlayed}</td>
                         <td>{row.wins}</td>
                         <td>{row.losses}</td>
