@@ -316,24 +316,7 @@ button:hover {
 .assign-dnd-layout {
   display: grid;
   gap: 0.9rem;
-  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
-}
-
-.assign-pool-card {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 0.75rem;
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.assign-pool-card h4 {
-  margin: 0;
-}
-
-.assign-pool-card p {
-  margin: 0.2rem 0 0.6rem;
-  color: var(--ink-soft);
-  font-size: 0.82rem;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
 }
 
 .assign-team-pool {
@@ -356,10 +339,10 @@ button:hover {
   color: var(--ink-soft);
 }
 
-.assign-courts-cards {
+.assign-courts-column {
   display: grid;
   gap: 0.8rem;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .assign-court-card {

@@ -2144,16 +2144,20 @@ function AdminPage() {
           </div>
 
           <div className="assign-dnd-layout">
-            <section className="assign-pool-card">
+            <section
+              className="assign-court-card assign-drop-target"
+              onDragOver={onAllowDrop}
+              onDrop={onDropTeamToUnassigned}
+            >
               <header>
-                <h4>All Active Teams</h4>
-                <p>Order: West, Middle, East, then alphabetical.</p>
+                <h4>Unassigned Teams</h4>
+                <p>{unassignedTeams.length} team(s)</p>
               </header>
               <div className="assign-team-pool">
-                {orderedActiveTeams.map((team) => {
-                  const assignedCourtId = teamToCourtId[team.id] ?? "";
-                  const assignedCourt = activeCourts.find((court) => court.id === assignedCourtId);
-                  return (
+                {unassignedTeams.length === 0 ? (
+                  <p className="status-msg">Drop teams here to clear their court assignment.</p>
+                ) : (
+                  unassignedTeams.map((team) => (
                     <button
                       key={team.id}
                       type="button"
@@ -2163,43 +2167,13 @@ function AdminPage() {
                       onDragEnd={onTeamDragEnd}
                     >
                       <span>{team.name}</span>
-                      <small>{assignedCourt?.name ?? "Unassigned"}</small>
                     </button>
-                  );
-                })}
+                  ))
+                )}
               </div>
             </section>
 
-            <div className="assign-courts-cards">
-              <section
-                className="assign-court-card assign-drop-target"
-                onDragOver={onAllowDrop}
-                onDrop={onDropTeamToUnassigned}
-              >
-                <header>
-                  <h4>Unassigned</h4>
-                  <p>{unassignedTeams.length} team(s)</p>
-                </header>
-                <div className="assign-court-team-list">
-                  {unassignedTeams.length === 0 ? (
-                    <p>Drop teams here to clear their court.</p>
-                  ) : (
-                    unassignedTeams.map((team) => (
-                      <button
-                        key={team.id}
-                        type="button"
-                        className="team-chip"
-                        draggable
-                        onDragStart={(event) => onTeamDragStart(event, team.id)}
-                        onDragEnd={onTeamDragEnd}
-                      >
-                        <span>{team.name}</span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </section>
-
+            <div className="assign-courts-column">
               {activeCourts.length === 0 ? (
                 <p className="form-error">No active courts are available. Activate at least one court in League Data first.</p>
               ) : (
