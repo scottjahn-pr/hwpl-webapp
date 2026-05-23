@@ -117,7 +117,7 @@ interface ApiDiagnostics {
   timestamp: string;
 }
 
-type WidgetScope = "global" | "match" | "export" | "matches" | "players" | "teams" | "leagues" | "courts";
+type WidgetScope = "global" | "match" | "export" | "matches" | "players" | "teams" | "leagues" | "courts" | "assign-courts";
 
 interface WidgetMessage {
   scope: WidgetScope;
@@ -176,6 +176,134 @@ const authFetch = (input: RequestInfo | URL, init?: RequestInit) => {
   });
 };
 
+const ASSIGNMENTS_STORAGE_KEY = "hwpl-admin-court-assignments-v1";
+const MIN_GAMES_PER_MATCH = 1;
+const MAX_GAMES_PER_MATCH = 9;
+
+type AdminView = "league-data" | "assign-courts";
+
+interface RoundRobinRound {
+  byeTeamId: string | null;
+  matches: Array<[string, string]>;
+}
+
+interface RoundRobinRow {
+  roundIndex: number;
+  rowIndexWithinRound: number;
+  matchesInRound: number;
+  byeTeamId: string | null;
+  teamAId: string;
+  teamBId: string;
+}
+
+interface SavedCourtAssignments {
+  teamToCourtId: Record<string, string>;
+  gamesPerCourt: Record<string, number>;
+}
+
+const clampGamesPerMatch = (value: number) => Math.min(MAX_GAMES_PER_MATCH, Math.max(MIN_GAMES_PER_MATCH, value));
+
+const escapeHtml = (value: string) => (
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+);
+
+const reorderMatchesForFlow = (matches: Array<[string, string]>, previousPair: [string, string] | null): Array<[string, string]> => {
+  if (matches.length <= 1) return matches;
+
+  const remaining = [...matches];
+  const ordered: Array<[string, string]> = [];
+  const getOverlap = (pairA: [string, string], pairB: [string, string]) => {
+    const setA = new Set(pairA);
+    return pairB.filter((teamId) => setA.has(teamId)).length;
+  };
+
+  while (remaining.length) {
+    const reference = ordered.length ? ordered[ordered.length - 1] : previousPair;
+    if (!reference) {
+      ordered.push(remaining.shift()!);
+      continue;
+    }
+
+    let bestIndex = 0;
+    let bestOverlap = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < remaining.length; i += 1) {
+      const overlap = getOverlap(reference, remaining[i]);
+      if (overlap < bestOverlap) {
+        bestOverlap = overlap;
+        bestIndex = i;
+      }
+      if (overlap === 0) break;
+    }
+
+    ordered.push(remaining.splice(bestIndex, 1)[0]);
+  }
+
+  return ordered;
+};
+
+const buildRoundRobinRows = (teamIds: string[]): RoundRobinRow[] => {
+  if (teamIds.length < 2) return [];
+
+  const BYE = "__BYE__";
+  const rotation = [...teamIds];
+  if (rotation.length % 2 === 1) {
+    rotation.push(BYE);
+  }
+
+  const rounds: RoundRobinRound[] = [];
+  const roundsCount = rotation.length - 1;
+
+  for (let roundIndex = 0; roundIndex < roundsCount; roundIndex += 1) {
+    const matches: Array<[string, string]> = [];
+    let byeTeamId: string | null = null;
+    const half = rotation.length / 2;
+
+    for (let i = 0; i < half; i += 1) {
+      const left = rotation[i];
+      const right = rotation[rotation.length - 1 - i];
+
+      if (left === BYE || right === BYE) {
+        byeTeamId = left === BYE ? right : left;
+        continue;
+      }
+
+      matches.push(roundIndex % 2 === 0 ? [left, right] : [right, left]);
+    }
+
+    rounds.push({ byeTeamId, matches });
+
+    const fixed = rotation[0];
+    const moving = rotation.slice(1);
+    moving.unshift(moving.pop()!);
+    rotation.splice(0, rotation.length, fixed, ...moving);
+  }
+
+  const rows: RoundRobinRow[] = [];
+  let previousPair: [string, string] | null = null;
+
+  rounds.forEach((round, roundIndex) => {
+    const orderedMatches = reorderMatchesForFlow(round.matches, previousPair);
+    orderedMatches.forEach((match, rowIndexWithinRound) => {
+      rows.push({
+        roundIndex,
+        rowIndexWithinRound,
+        matchesInRound: orderedMatches.length,
+        byeTeamId: round.byeTeamId,
+        teamAId: match[0],
+        teamBId: match[1]
+      });
+    });
+    previousPair = orderedMatches.length ? orderedMatches[orderedMatches.length - 1] : previousPair;
+  });
+
+  return rows;
+};
+
 function AdminPage() {
   const [authLoading, setAuthLoading] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
@@ -232,6 +360,9 @@ function AdminPage() {
   const [csvDate, setCsvDate] = useState("");
   const [matchDates, setMatchDates] = useState<string[]>([]);
   const [adminApiBase, setAdminApiBase] = useState("/api/ops");
+  const [adminView, setAdminView] = useState<AdminView>("league-data");
+  const [teamToCourtId, setTeamToCourtId] = useState<Record<string, string>>({});
+  const [gamesPerCourt, setGamesPerCourt] = useState<Record<string, number>>({});
 
   const showWidgetMessage = useCallback((scope: WidgetScope, text: string, isError = false) => {
     setWidgetMessage({ scope, text, isError });
@@ -258,6 +389,63 @@ function AdminPage() {
   const activeCourts = useMemo(() => courts.filter((court) => court.isActive), [courts]);
   const activeTeams = useMemo(() => teams.filter((team) => team.isActive), [teams]);
   const activePlayers = useMemo(() => players.filter((player) => player.isActive), [players]);
+  const teamNameById = useMemo(() => new Map(teams.map((team) => [team.id, team.name])), [teams]);
+  const courtNameById = useMemo(() => new Map(courts.map((court) => [court.id, court.name])), [courts]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(ASSIGNMENTS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<SavedCourtAssignments>;
+      if (parsed.teamToCourtId && typeof parsed.teamToCourtId === "object") {
+        setTeamToCourtId(parsed.teamToCourtId as Record<string, string>);
+      }
+      if (parsed.gamesPerCourt && typeof parsed.gamesPerCourt === "object") {
+        const normalized: Record<string, number> = {};
+        Object.entries(parsed.gamesPerCourt).forEach(([courtId, games]) => {
+          const numericGames = Number(games);
+          if (!Number.isNaN(numericGames)) {
+            normalized[courtId] = clampGamesPerMatch(Math.round(numericGames));
+          }
+        });
+        setGamesPerCourt(normalized);
+      }
+    } catch {
+      // Keep defaults if local storage is unavailable or malformed.
+    }
+  }, []);
+
+  useEffect(() => {
+    const activeTeamIds = new Set(activeTeams.map((team) => team.id));
+    const activeCourtIds = new Set(activeCourts.map((court) => court.id));
+
+    setTeamToCourtId((prev) => {
+      const next: Record<string, string> = {};
+      Object.entries(prev).forEach(([teamId, courtId]) => {
+        if (activeTeamIds.has(teamId) && activeCourtIds.has(courtId)) {
+          next[teamId] = courtId;
+        }
+      });
+      return next;
+    });
+
+    setGamesPerCourt((prev) => {
+      const next: Record<string, number> = {};
+      activeCourts.forEach((court) => {
+        next[court.id] = clampGamesPerMatch(prev[court.id] ?? 2);
+      });
+      return next;
+    });
+  }, [activeCourts, activeTeams]);
+
+  useEffect(() => {
+    try {
+      const payload: SavedCourtAssignments = { teamToCourtId, gamesPerCourt };
+      window.localStorage.setItem(ASSIGNMENTS_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Saving assignments is best-effort.
+    }
+  }, [gamesPerCourt, teamToCourtId]);
 
   // Match form lists: active items plus any currently-referenced inactive item so the select always renders its value.
   const matchFormLeagues = useMemo(() => {
@@ -355,6 +543,211 @@ function AdminPage() {
     () => new Map(leagues.map((l) => [l.id, l.name])),
     [leagues]
   );
+
+  const assignedTeamsByCourt = useMemo(() => {
+    const grouped: Record<string, Team[]> = {};
+    activeCourts.forEach((court) => {
+      grouped[court.id] = [];
+    });
+
+    activeTeams.forEach((team) => {
+      const assignedCourtId = teamToCourtId[team.id];
+      if (assignedCourtId && grouped[assignedCourtId]) {
+        grouped[assignedCourtId].push(team);
+      }
+    });
+
+    Object.values(grouped).forEach((teamsForCourt) => {
+      teamsForCourt.sort((a, b) => a.name.localeCompare(b.name));
+    });
+
+    return grouped;
+  }, [activeCourts, activeTeams, teamToCourtId]);
+
+  const unassignedTeams = useMemo(
+    () => activeTeams
+      .filter((team) => !teamToCourtId[team.id])
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    [activeTeams, teamToCourtId]
+  );
+
+  const onAssignTeamToCourt = (teamId: string, courtId: string) => {
+    setTeamToCourtId((prev) => {
+      if (!courtId) {
+        const { [teamId]: _removed, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [teamId]: courtId };
+    });
+  };
+
+  const onChangeGamesPerCourt = (courtId: string, rawValue: string) => {
+    const parsed = Number.parseInt(rawValue, 10);
+    const normalized = Number.isNaN(parsed) ? 2 : clampGamesPerMatch(parsed);
+    setGamesPerCourt((prev) => ({ ...prev, [courtId]: normalized }));
+  };
+
+  const onClearAllAssignments = () => {
+    setTeamToCourtId({});
+    showWidgetMessage("assign-courts", "All court assignments were cleared.");
+  };
+
+  const openRoundRobinPrintWindow = (court: Court) => {
+    const teamsForCourt = assignedTeamsByCourt[court.id] ?? [];
+    if (teamsForCourt.length < 2) {
+      showWidgetMessage("assign-courts", `Assign at least 2 teams to ${court.name} to generate matches.`, true);
+      return;
+    }
+
+    const teamIds = teamsForCourt.map((team) => team.id);
+    const rows = buildRoundRobinRows(teamIds);
+    const gameCount = clampGamesPerMatch(gamesPerCourt[court.id] ?? 2);
+    if (!rows.length) {
+      showWidgetMessage("assign-courts", `No round robin schedule could be generated for ${court.name}.`, true);
+      return;
+    }
+
+    const scoreHeaders = Array.from({ length: gameCount }, (_, index) => index + 1)
+      .map((gameNumber) => `
+        <th colspan="2">Game ${gameNumber} Score</th>
+      `)
+      .join("");
+
+    const scoreSubHeaders = Array.from({ length: gameCount }, () => `
+      <th>Team 1</th>
+      <th>Team 2</th>
+    `).join("");
+
+    const bodyRows = rows.map((row) => {
+      const byeName = row.byeTeamId ? (teamNameById.get(row.byeTeamId) ?? row.byeTeamId) : "-";
+      const teamAName = teamNameById.get(row.teamAId) ?? row.teamAId;
+      const teamBName = teamNameById.get(row.teamBId) ?? row.teamBId;
+      const scoreCells = Array.from({ length: gameCount }, () => "<td></td><td></td>").join("");
+
+      return `
+        <tr>
+          ${row.rowIndexWithinRound === 0 ? `<td rowspan="${row.matchesInRound}">${escapeHtml(byeName)}</td>` : ""}
+          <td>${escapeHtml(teamAName)}</td>
+          <td class="vs-cell">vs</td>
+          <td>${escapeHtml(teamBName)}</td>
+          ${scoreCells}
+        </tr>
+      `;
+    }).join("");
+
+    const generatedAt = new Date().toLocaleString();
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(court.name)} Round Robin</title>
+    <style>
+      @page { size: letter landscape; margin: 0.4in; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Arial", "Helvetica", sans-serif;
+        color: #000;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 22px;
+      }
+      .meta {
+        margin: 0 0 8px;
+        font-size: 12px;
+      }
+      .note {
+        text-align: center;
+        font-size: 14px;
+        margin: 8px 0;
+        font-weight: 700;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+      th,
+      td {
+        border: 1px solid #000;
+        text-align: center;
+        padding: 6px 4px;
+        font-size: 13px;
+        vertical-align: middle;
+      }
+      thead th {
+        background: #f2f2f2;
+      }
+      td:first-child,
+      th:first-child {
+        width: 13%;
+      }
+      .court-col {
+        width: 13%;
+      }
+      .vs-cell {
+        width: 4%;
+        font-weight: 700;
+      }
+      .print-actions {
+        margin-top: 8px;
+        display: flex;
+        justify-content: flex-end;
+      }
+      .print-actions button {
+        border: 1px solid #333;
+        padding: 6px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        background: #fff;
+      }
+      @media print {
+        .print-actions {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>${escapeHtml(court.name)} Round Robin Assignment Grid</h1>
+    <p class="meta">Generated: ${escapeHtml(generatedAt)} | Teams Assigned: ${teamsForCourt.length} | Games per Matchup: ${gameCount}</p>
+    <p class="note">* Please record any use of substitutes, thanks!</p>
+    <table>
+      <thead>
+        <tr>
+          <th rowspan="2">Bye</th>
+          <th colspan="3">${escapeHtml(court.name)}</th>
+          ${scoreHeaders}
+        </tr>
+        <tr>
+          <th class="court-col">Team 1</th>
+          <th class="vs-cell">vs</th>
+          <th class="court-col">Team 2</th>
+          ${scoreSubHeaders}
+        </tr>
+      </thead>
+      <tbody>
+        ${bodyRows}
+      </tbody>
+    </table>
+    <div class="print-actions">
+      <button type="button" onclick="window.print()">Print</button>
+    </div>
+  </body>
+</html>`;
+
+    const printWindow = window.open("", "_blank", "noopener,noreferrer");
+    if (!printWindow) {
+      showWidgetMessage("assign-courts", "Pop-up blocked. Allow pop-ups to open the printable schedule.", true);
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    showWidgetMessage("assign-courts", `Generated a printable schedule for ${court.name}.`);
+  };
 
   const extractObjectId = (entry: AuthMeLegacyEntry | AuthMeCurrentEntry | undefined): string => {
     if (!entry) return "";
@@ -1066,10 +1459,14 @@ function AdminPage() {
           <img className="club-logo" src="/brand/HW PickleBall Logo.png" alt="Hiram Walker Pickleball Club logo" />
           <div>
             <p className="eyebrow">HWPL Administration</p>
-            <h1>League Management</h1>
+            <h1>{adminView === "league-data" ? "League Data" : "Assign Courts"}</h1>
           </div>
         </div>
-        <p>Manage players, teams, leagues, match entries, and exports.</p>
+        <p>
+          {adminView === "league-data"
+            ? "Manage players, teams, leagues, match entries, and exports."
+            : "Assign active teams to active courts and generate printable round robin score sheets."}
+        </p>
         <div className="admin-auth-links admin-auth-links-hero">
           <a className="admin-link" href="/">Public stats</a>
           <a className="admin-link" href="/.auth/logout?post_logout_redirect_uri=/">Sign out</a>
@@ -1078,6 +1475,24 @@ function AdminPage() {
 
       {renderWidgetMessage("global")}
 
+      <section className="panel admin-tabs" aria-label="Admin pages">
+        <button
+          type="button"
+          className={adminView === "league-data" ? "active" : ""}
+          onClick={() => setAdminView("league-data")}
+        >
+          League Data
+        </button>
+        <button
+          type="button"
+          className={adminView === "assign-courts" ? "active" : ""}
+          onClick={() => setAdminView("assign-courts")}
+        >
+          Assign Courts
+        </button>
+      </section>
+
+      {adminView === "league-data" ? (
       <section className="admin-grid">
         <article className="panel module-record-match" ref={matchFormRef}>
           <div className="panel-header">
@@ -1670,6 +2085,110 @@ function AdminPage() {
         </article>
 
       </section>
+      ) : (
+      <section className="assign-courts-layout">
+        <article className="panel">
+          <div className="panel-header">
+            <h3>Team Court Assignments</h3>
+            <p>Place each active team on an active court, or leave the team unassigned for the week.</p>
+          </div>
+          {renderWidgetMessage("assign-courts")}
+          <div className="assign-courts-toolbar">
+            <p>
+              Active teams: {activeTeams.length} | Active courts: {activeCourts.length} | Unassigned teams: {unassignedTeams.length}
+            </p>
+            <button type="button" onClick={onClearAllAssignments}>
+              Clear All Assignments
+            </button>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Team</th>
+                  <th>Court Assignment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeTeams
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((team) => (
+                    <tr key={team.id}>
+                      <td>{team.name}</td>
+                      <td>
+                        <select
+                          value={teamToCourtId[team.id] ?? ""}
+                          onChange={(event) => onAssignTeamToCourt(team.id, event.target.value)}
+                        >
+                          <option value="">Unassigned</option>
+                          {activeCourts.map((court) => (
+                            <option key={court.id} value={court.id}>
+                              {court.name}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article className="panel">
+          <div className="panel-header">
+            <h3>Generate Court Match Sheets</h3>
+            <p>Set games per matchup for each court, then generate the printable round robin score grid.</p>
+          </div>
+
+          <div className="assign-courts-cards">
+            {activeCourts.length === 0 ? (
+              <p className="form-error">No active courts are available. Activate at least one court in League Data first.</p>
+            ) : (
+              activeCourts.map((court) => {
+                const assignedTeams = assignedTeamsByCourt[court.id] ?? [];
+                return (
+                  <section key={court.id} className="assign-court-card">
+                    <header>
+                      <h4>{court.name}</h4>
+                      <p>{assignedTeams.length} assigned team(s)</p>
+                    </header>
+
+                    <label>
+                      Number of games per matchup
+                      <input
+                        type="number"
+                        min={MIN_GAMES_PER_MATCH}
+                        max={MAX_GAMES_PER_MATCH}
+                        value={gamesPerCourt[court.id] ?? 2}
+                        onChange={(event) => onChangeGamesPerCourt(court.id, event.target.value)}
+                      />
+                    </label>
+
+                    <div className="assign-court-team-list">
+                      {assignedTeams.length === 0 ? (
+                        <p>No teams assigned.</p>
+                      ) : (
+                        assignedTeams.map((team) => <span key={team.id}>{team.name}</span>)
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => openRoundRobinPrintWindow(court)}
+                      disabled={assignedTeams.length < 2}
+                    >
+                      Generate Matches
+                    </button>
+                  </section>
+                );
+              })
+            )}
+          </div>
+        </article>
+      </section>
+      )}
 
     </main>
   );
