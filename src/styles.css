@@ -359,6 +359,7 @@ button:hover {
 
 .assign-drop-target {
   min-height: 190px;
+  align-content: start;
 }
 
 .assign-court-card header h4 {
