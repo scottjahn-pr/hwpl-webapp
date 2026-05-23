@@ -761,8 +761,7 @@ function AdminPage() {
     </style>
   </head>
   <body>
-    <h1>${escapeHtml(court.name)} Round Robin Assignment Grid</h1>
-    <p class="meta">Generated: ${escapeHtml(generatedAt)} | Teams Assigned: ${teamsForCourt.length} | Games per Matchup: ${gameCount}</p>
+    <h1>${escapeHtml(court.name)} Court</h1>
     <p class="note">* Please record any use of substitutes, thanks!</p>
     <table>
       <thead>
