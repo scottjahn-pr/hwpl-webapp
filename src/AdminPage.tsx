@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DragEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Court, League, Player, Team } from "./types";
 
 interface AuthMeClaim {
@@ -179,6 +179,7 @@ const authFetch = (input: RequestInfo | URL, init?: RequestInit) => {
 const ASSIGNMENTS_STORAGE_KEY = "hwpl-admin-court-assignments-v1";
 const MIN_GAMES_PER_MATCH = 1;
 const MAX_GAMES_PER_MATCH = 9;
+const TEAM_ORDER_PRIORITY = ["west", "middle", "east"];
 
 type AdminView = "league-data" | "assign-courts";
 
@@ -211,6 +212,12 @@ const escapeHtml = (value: string) => (
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;")
 );
+
+const getTeamOrderRank = (teamName: string) => {
+  const normalized = teamName.trim().toLowerCase();
+  const priorityIndex = TEAM_ORDER_PRIORITY.indexOf(normalized);
+  return priorityIndex === -1 ? Number.POSITIVE_INFINITY : priorityIndex;
+};
 
 const reorderMatchesForFlow = (matches: Array<[string, string]>, previousPair: [string, string] | null): Array<[string, string]> => {
   if (matches.length <= 1) return matches;
@@ -363,6 +370,7 @@ function AdminPage() {
   const [adminView, setAdminView] = useState<AdminView>("league-data");
   const [teamToCourtId, setTeamToCourtId] = useState<Record<string, string>>({});
   const [gamesPerCourt, setGamesPerCourt] = useState<Record<string, number>>({});
+  const [draggedTeamId, setDraggedTeamId] = useState<string | null>(null);
 
   const showWidgetMessage = useCallback((scope: WidgetScope, text: string, isError = false) => {
     setWidgetMessage({ scope, text, isError });
@@ -390,6 +398,16 @@ function AdminPage() {
   const activeTeams = useMemo(() => teams.filter((team) => team.isActive), [teams]);
   const activePlayers = useMemo(() => players.filter((player) => player.isActive), [players]);
   const teamNameById = useMemo(() => new Map(teams.map((team) => [team.id, team.name])), [teams]);
+  const orderedActiveTeams = useMemo(
+    () => activeTeams
+      .slice()
+      .sort((a, b) => {
+        const rankDelta = getTeamOrderRank(a.name) - getTeamOrderRank(b.name);
+        if (rankDelta !== 0) return rankDelta;
+        return a.name.localeCompare(b.name);
+      }),
+    [activeTeams]
+  );
 
   useEffect(() => {
     try {
@@ -549,25 +567,19 @@ function AdminPage() {
       grouped[court.id] = [];
     });
 
-    activeTeams.forEach((team) => {
+    orderedActiveTeams.forEach((team) => {
       const assignedCourtId = teamToCourtId[team.id];
       if (assignedCourtId && grouped[assignedCourtId]) {
         grouped[assignedCourtId].push(team);
       }
     });
 
-    Object.values(grouped).forEach((teamsForCourt) => {
-      teamsForCourt.sort((a, b) => a.name.localeCompare(b.name));
-    });
-
     return grouped;
-  }, [activeCourts, activeTeams, teamToCourtId]);
+  }, [activeCourts, orderedActiveTeams, teamToCourtId]);
 
   const unassignedTeams = useMemo(
-    () => activeTeams
-      .filter((team) => !teamToCourtId[team.id])
-      .sort((a, b) => a.name.localeCompare(b.name)),
-    [activeTeams, teamToCourtId]
+    () => orderedActiveTeams.filter((team) => !teamToCourtId[team.id]),
+    [orderedActiveTeams, teamToCourtId]
   );
 
   const onAssignTeamToCourt = (teamId: string, courtId: string) => {
@@ -589,6 +601,36 @@ function AdminPage() {
   const onClearAllAssignments = () => {
     setTeamToCourtId({});
     showWidgetMessage("assign-courts", "All court assignments were cleared.");
+  };
+
+  const onTeamDragStart = (event: DragEvent<HTMLElement>, teamId: string) => {
+    setDraggedTeamId(teamId);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/team-id", teamId);
+  };
+
+  const onTeamDragEnd = () => {
+    setDraggedTeamId(null);
+  };
+
+  const onAllowDrop = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+  };
+
+  const onDropTeamToCourt = (event: DragEvent<HTMLElement>, courtId: string) => {
+    event.preventDefault();
+    const droppedTeamId = event.dataTransfer.getData("text/team-id") || draggedTeamId;
+    if (!droppedTeamId) return;
+    onAssignTeamToCourt(droppedTeamId, courtId);
+    setDraggedTeamId(null);
+  };
+
+  const onDropTeamToUnassigned = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    const droppedTeamId = event.dataTransfer.getData("text/team-id") || draggedTeamId;
+    if (!droppedTeamId) return;
+    onAssignTeamToCourt(droppedTeamId, "");
+    setDraggedTeamId(null);
   };
 
   const openRoundRobinPrintWindow = (court: Court) => {
@@ -2089,7 +2131,7 @@ function AdminPage() {
         <article className="panel">
           <div className="panel-header">
             <h3>Team Court Assignments</h3>
-            <p>Place each active team on an active court, or leave the team unassigned for the week.</p>
+            <p>Drag teams from the list onto a court, or drop on Unassigned to remove placement.</p>
           </div>
           {renderWidgetMessage("assign-courts")}
           <div className="assign-courts-toolbar">
@@ -2100,90 +2142,123 @@ function AdminPage() {
               Clear All Assignments
             </button>
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Team</th>
-                  <th>Court Assignment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeTeams
-                  .slice()
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((team) => (
-                    <tr key={team.id}>
-                      <td>{team.name}</td>
-                      <td>
-                        <select
-                          value={teamToCourtId[team.id] ?? ""}
-                          onChange={(event) => onAssignTeamToCourt(team.id, event.target.value)}
-                        >
-                          <option value="">Unassigned</option>
-                          {activeCourts.map((court) => (
-                            <option key={court.id} value={court.id}>
-                              {court.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        </article>
 
-        <article className="panel">
-          <div className="panel-header">
-            <h3>Generate Court Match Sheets</h3>
-            <p>Set games per matchup for each court, then generate the printable round robin score grid.</p>
-          </div>
-
-          <div className="assign-courts-cards">
-            {activeCourts.length === 0 ? (
-              <p className="form-error">No active courts are available. Activate at least one court in League Data first.</p>
-            ) : (
-              activeCourts.map((court) => {
-                const assignedTeams = assignedTeamsByCourt[court.id] ?? [];
-                return (
-                  <section key={court.id} className="assign-court-card">
-                    <header>
-                      <h4>{court.name}</h4>
-                      <p>{assignedTeams.length} assigned team(s)</p>
-                    </header>
-
-                    <label>
-                      Number of games per matchup
-                      <input
-                        type="number"
-                        min={MIN_GAMES_PER_MATCH}
-                        max={MAX_GAMES_PER_MATCH}
-                        value={gamesPerCourt[court.id] ?? 2}
-                        onChange={(event) => onChangeGamesPerCourt(court.id, event.target.value)}
-                      />
-                    </label>
-
-                    <div className="assign-court-team-list">
-                      {assignedTeams.length === 0 ? (
-                        <p>No teams assigned.</p>
-                      ) : (
-                        assignedTeams.map((team) => <span key={team.id}>{team.name}</span>)
-                      )}
-                    </div>
-
+          <div className="assign-dnd-layout">
+            <section className="assign-pool-card">
+              <header>
+                <h4>All Active Teams</h4>
+                <p>Order: West, Middle, East, then alphabetical.</p>
+              </header>
+              <div className="assign-team-pool">
+                {orderedActiveTeams.map((team) => {
+                  const assignedCourtId = teamToCourtId[team.id] ?? "";
+                  const assignedCourt = activeCourts.find((court) => court.id === assignedCourtId);
+                  return (
                     <button
+                      key={team.id}
                       type="button"
-                      onClick={() => openRoundRobinPrintWindow(court)}
-                      disabled={assignedTeams.length < 2}
+                      className="team-chip"
+                      draggable
+                      onDragStart={(event) => onTeamDragStart(event, team.id)}
+                      onDragEnd={onTeamDragEnd}
                     >
-                      Generate Matches
+                      <span>{team.name}</span>
+                      <small>{assignedCourt?.name ?? "Unassigned"}</small>
                     </button>
-                  </section>
-                );
-              })
-            )}
+                  );
+                })}
+              </div>
+            </section>
+
+            <div className="assign-courts-cards">
+              <section
+                className="assign-court-card assign-drop-target"
+                onDragOver={onAllowDrop}
+                onDrop={onDropTeamToUnassigned}
+              >
+                <header>
+                  <h4>Unassigned</h4>
+                  <p>{unassignedTeams.length} team(s)</p>
+                </header>
+                <div className="assign-court-team-list">
+                  {unassignedTeams.length === 0 ? (
+                    <p>Drop teams here to clear their court.</p>
+                  ) : (
+                    unassignedTeams.map((team) => (
+                      <button
+                        key={team.id}
+                        type="button"
+                        className="team-chip"
+                        draggable
+                        onDragStart={(event) => onTeamDragStart(event, team.id)}
+                        onDragEnd={onTeamDragEnd}
+                      >
+                        <span>{team.name}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </section>
+
+              {activeCourts.length === 0 ? (
+                <p className="form-error">No active courts are available. Activate at least one court in League Data first.</p>
+              ) : (
+                activeCourts.map((court) => {
+                  const assignedTeams = assignedTeamsByCourt[court.id] ?? [];
+                  return (
+                    <section
+                      key={court.id}
+                      className="assign-court-card assign-drop-target"
+                      onDragOver={onAllowDrop}
+                      onDrop={(event) => onDropTeamToCourt(event, court.id)}
+                    >
+                      <header>
+                        <h4>{court.name}</h4>
+                        <p>{assignedTeams.length} assigned team(s)</p>
+                      </header>
+
+                      <label>
+                        Number of games per matchup
+                        <input
+                          type="number"
+                          min={MIN_GAMES_PER_MATCH}
+                          max={MAX_GAMES_PER_MATCH}
+                          value={gamesPerCourt[court.id] ?? 2}
+                          onChange={(event) => onChangeGamesPerCourt(court.id, event.target.value)}
+                        />
+                      </label>
+
+                      <div className="assign-court-team-list">
+                        {assignedTeams.length === 0 ? (
+                          <p>Drop teams here.</p>
+                        ) : (
+                          assignedTeams.map((team) => (
+                            <button
+                              key={team.id}
+                              type="button"
+                              className="team-chip"
+                              draggable
+                              onDragStart={(event) => onTeamDragStart(event, team.id)}
+                              onDragEnd={onTeamDragEnd}
+                            >
+                              <span>{team.name}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => openRoundRobinPrintWindow(court)}
+                        disabled={assignedTeams.length < 2}
+                      >
+                        Generate Matches
+                      </button>
+                    </section>
+                  );
+                })
+              )}
+            </div>
           </div>
         </article>
       </section>
