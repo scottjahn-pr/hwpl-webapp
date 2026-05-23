@@ -686,7 +686,6 @@ function AdminPage() {
       `;
     }).join("");
 
-    const generatedAt = new Date().toLocaleString();
     const html = `<!doctype html>
 <html>
   <head>
