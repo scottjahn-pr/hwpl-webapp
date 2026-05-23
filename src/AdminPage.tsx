@@ -205,11 +205,11 @@ const clampGamesPerMatch = (value: number) => Math.min(MAX_GAMES_PER_MATCH, Math
 
 const escapeHtml = (value: string) => (
   value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
 );
 
 const reorderMatchesForFlow = (matches: Array<[string, string]>, previousPair: [string, string] | null): Array<[string, string]> => {
@@ -390,7 +390,6 @@ function AdminPage() {
   const activeTeams = useMemo(() => teams.filter((team) => team.isActive), [teams]);
   const activePlayers = useMemo(() => players.filter((player) => player.isActive), [players]);
   const teamNameById = useMemo(() => new Map(teams.map((team) => [team.id, team.name])), [teams]);
-  const courtNameById = useMemo(() => new Map(courts.map((court) => [court.id, court.name])), [courts]);
 
   useEffect(() => {
     try {
