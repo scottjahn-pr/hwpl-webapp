@@ -398,6 +398,16 @@ function AdminPage() {
   const activeTeams = useMemo(() => teams.filter((team) => team.isActive), [teams]);
   const activePlayers = useMemo(() => players.filter((player) => player.isActive), [players]);
   const teamNameById = useMemo(() => new Map(teams.map((team) => [team.id, team.name])), [teams]);
+  const orderedActiveCourts = useMemo(
+    () => activeCourts
+      .slice()
+      .sort((a, b) => {
+        const rankDelta = getTeamOrderRank(a.name) - getTeamOrderRank(b.name);
+        if (rankDelta !== 0) return rankDelta;
+        return a.name.localeCompare(b.name);
+      }),
+    [activeCourts]
+  );
   const orderedActiveTeams = useMemo(
     () => activeTeams
       .slice()
@@ -563,7 +573,7 @@ function AdminPage() {
 
   const assignedTeamsByCourt = useMemo(() => {
     const grouped: Record<string, Team[]> = {};
-    activeCourts.forEach((court) => {
+    orderedActiveCourts.forEach((court) => {
       grouped[court.id] = [];
     });
 
@@ -575,7 +585,7 @@ function AdminPage() {
     });
 
     return grouped;
-  }, [activeCourts, orderedActiveTeams, teamToCourtId]);
+  }, [orderedActiveCourts, orderedActiveTeams, teamToCourtId]);
 
   const unassignedTeams = useMemo(
     () => orderedActiveTeams.filter((team) => !teamToCourtId[team.id]),
@@ -778,15 +788,18 @@ function AdminPage() {
   </body>
 </html>`;
 
-    const printWindow = window.open("", "_blank", "noopener,noreferrer");
+    const htmlBlob = new Blob([html], { type: "text/html" });
+    const htmlUrl = URL.createObjectURL(htmlBlob);
+    const printWindow = window.open(htmlUrl, "_blank");
     if (!printWindow) {
+      URL.revokeObjectURL(htmlUrl);
       showWidgetMessage("assign-courts", "Pop-up blocked. Allow pop-ups to open the printable schedule.", true);
       return;
     }
 
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
+    window.setTimeout(() => {
+      URL.revokeObjectURL(htmlUrl);
+    }, 60_000);
     showWidgetMessage("assign-courts", `Generated a printable schedule for ${court.name}.`);
   };
 
@@ -2177,7 +2190,7 @@ function AdminPage() {
               {activeCourts.length === 0 ? (
                 <p className="form-error">No active courts are available. Activate at least one court in League Data first.</p>
               ) : (
-                activeCourts.map((court) => {
+                orderedActiveCourts.map((court) => {
                   const assignedTeams = assignedTeamsByCourt[court.id] ?? [];
                   return (
                     <section

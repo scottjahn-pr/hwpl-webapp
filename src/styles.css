@@ -320,8 +320,11 @@ button:hover {
 }
 
 .assign-team-pool {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.45rem;
+  align-content: flex-start;
+  align-items: start;
 }
 
 .assign-courts-toolbar {
@@ -376,6 +379,7 @@ button:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  align-items: flex-start;
   align-content: flex-start;
 }
 
@@ -385,10 +389,14 @@ button:hover {
   padding: 0.22rem 0.56rem;
   background: #fff;
   color: var(--ink);
+  width: fit-content;
+  max-width: 100%;
+  flex: 0 0 auto;
+  justify-self: flex-start;
   font-size: 0.78rem;
   line-height: 1.2;
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.4rem;
   cursor: grab;
 }
